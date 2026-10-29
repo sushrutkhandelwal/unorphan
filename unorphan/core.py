@@ -25,7 +25,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
-APP = "downloads-sorter"
+APP = "unorphan"
 MODEL = "jev-latest"
 PRICE_PER_MTOK = 0.042  # USD per million input tokens; output is free (docs.typesafe.ai/models)
 NO_PROJECT = "no_project"
@@ -33,7 +33,7 @@ CONFIG_DIR = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / 
 CONFIG_PATH = CONFIG_DIR / "config.toml"
 FOLDERS_PATH = CONFIG_DIR / "folders.json"  # custom folders, hints, switched-off projects (edited by the UI)
 CACHE_PATH = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache")) / APP / "cache.json"
-LOG_NAME = ".downloads-sorter-log.jsonl"
+LOG_NAME = ".unorphan-log.jsonl"
 
 # Jev rejects images with a side under 280px or over 1568px.
 JEV_MIN_SIDE, JEV_MAX_SIDE = 280, 1568
@@ -249,7 +249,7 @@ def save_config(updates: dict, path: Path | None = None) -> dict:
     if data.get("dest") and Path(data["dest"]).expanduser() == Path(data.get("downloads", DEFAULTS["downloads"])).expanduser():
         raise SettingsError({"dest": "Sorted files need their own folder, not the folder being organized."})
     path.parent.mkdir(parents=True, exist_ok=True)
-    lines = ["# downloads-sorter settings. Edited by the app's Settings panel; safe to edit by hand.", ""]
+    lines = ["# unorphan settings. Edited by the app's Settings panel; safe to edit by hand.", ""]
     lines += [f"{k} = {_toml(v)}" for k, v in data.items() if v is not None]
     path.write_text("\n".join(lines) + "\n")
     path.chmod(0o600)  # it may hold an API key

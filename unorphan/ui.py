@@ -243,7 +243,7 @@ class App:
 
 def make_handler(app: App, page: str):
     class Handler(BaseHTTPRequestHandler):
-        server_version = "downloads-sorter"
+        server_version = "unorphan"
 
         def log_message(self, *args) -> None:  # keep the terminal quiet
             pass
@@ -349,7 +349,7 @@ def serve(config_path: Path | None, overrides: dict, port: int = 0, open_browser
     app = App(config_path, overrides)
     server = ThreadingHTTPServer(("127.0.0.1", port), make_handler(app, page))
     url = f"http://127.0.0.1:{server.server_address[1]}/"
-    print(f"Downloads Sorter is running at {url}\nPress Ctrl+C to stop.", flush=True)
+    print(f"Unorphan is running at {url}\nPress Ctrl+C to stop.", flush=True)
     problems = app.problems()
     if problems:
         print("Setup needed (the Settings panel will open): " + " ".join(problems), flush=True)

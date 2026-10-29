@@ -1,5 +1,5 @@
-# Easiest: run `downloads-sorter ui` and use Settings, which writes this file for you.
-# By hand: copy to ~/.config/downloads-sorter/config.toml and edit.
+# Easiest: run `unorphan ui` and use Settings, which writes this file for you.
+# By hand: copy to ~/.config/unorphan/config.toml and edit.
 # Every setting is optional; command-line flags override what's here.
 
 # Folders that hold your projects. Every folder directly inside one of these

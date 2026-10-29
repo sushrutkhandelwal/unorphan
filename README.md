@@ -1,15 +1,15 @@
-# Downloads Sorter
+# Unorphan
 
-Puts the files in your Downloads folder back where they belong.
+Finds a home for the orphaned files in your Downloads folder.
 
-![Downloads Sorter showing twelve downloads grouped under the projects they belong to](docs/sorter.png)
+![Unorphan showing twelve downloads grouped under the projects they belong to](docs/sorter.png)
 
 If you work on a few projects at once, your Downloads folder is where their files pile up: the
 podcast episode you exported, a client's brand guidelines, a CSV from some dashboard, a screenshot
 called `Screenshot 2026-10-12 at 14.02.11.png`. Each one belongs to a project, but nobody files them
 away, so after a month you can't find anything.
 
-Downloads Sorter looks at everything loose in the folder, works out which of your projects each
+Unorphan looks at everything loose in the folder, works out which of your projects each
 item belongs to, and moves it into a folder for that project. It already knows your projects: it
 reads the README or CLAUDE.md in each of your code folders. You can also add folders of your own
 for things broader than one project, like a company you work with.
@@ -42,14 +42,14 @@ Clone this repository, then from inside it:
 
 ```sh
 uv tool install .
-downloads-sorter ui
+unorphan ui
 ```
 
-The first command installs a `downloads-sorter` command you can run from anywhere. The second
+The first command installs an `unorphan` command you can run from anywhere. The second
 opens the app in your browser. The first time, it opens **Settings** and tells you what's missing
 (usually the API key).
 
-To try it without installing, run `uv run downloads-sorter ui` from inside the repository instead.
+To try it without installing, run `uv run unorphan ui` from inside the repository instead.
 
 ## Using it
 
@@ -111,10 +111,10 @@ rescan only pays for new ones.
 Everything also works from a terminal, which is handy for a quick tidy or a scheduled job:
 
 ```sh
-downloads-sorter                  # show what would move; moves nothing
-downloads-sorter --apply          # move it
-downloads-sorter --undo           # put back the last move
-downloads-sorter --list-projects  # every destination, and what Jev is told about it
+unorphan                  # show what would move; moves nothing
+unorphan --apply          # move it
+unorphan --undo           # put back the last move
+unorphan --list-projects  # every destination, and what Jev is told about it
 ```
 
 | Option | What it does |
@@ -169,10 +169,10 @@ folders. Each run shows what it used.
 
 | File | What's in it |
 |---|---|
-| `~/.config/downloads-sorter/config.toml` | Your settings. Only your user account can read it, since it can hold your key. |
-| `~/.config/downloads-sorter/folders.json` | Your own folders, project hints and switched-off projects |
-| `~/.cache/downloads-sorter/cache.json` | Jev's past answers. Safe to delete. |
-| `<sorted files folder>/.downloads-sorter-log.jsonl` | Every move, so it can be undone |
+| `~/.config/unorphan/config.toml` | Your settings. Only your user account can read it, since it can hold your key. |
+| `~/.config/unorphan/folders.json` | Your own folders, project hints and switched-off projects |
+| `~/.cache/unorphan/cache.json` | Jev's past answers. Safe to delete. |
+| `<sorted files folder>/.unorphan-log.jsonl` | Every move, so it can be undone |
 
 All of them are plain text. Settings can be edited by hand, and
 [`config.example.toml`](config.example.toml) lists every option.
@@ -180,8 +180,8 @@ All of them are plain text. Settings can be edited by hand, and
 ## Uninstalling
 
 ```sh
-uv tool uninstall downloads-sorter
-rm -rf ~/.config/downloads-sorter ~/.cache/downloads-sorter
+uv tool uninstall unorphan
+rm -rf ~/.config/unorphan ~/.cache/unorphan
 ```
 
 Your sorted files stay where they are.
@@ -189,12 +189,12 @@ Your sorted files stay where they are.
 ## Working on it
 
 ```
-downloads_sorter/
+unorphan/
   core.py    settings, finding projects, asking Jev, moving and undoing
-  cli.py     the downloads-sorter command
+  cli.py     the unorphan command
   ui.py      the local web server behind the app
   ui.html    the app itself (one file, no build step)
 ```
 
-`uv run downloads-sorter ui` runs it from a checkout. Jev's API is documented at
+`uv run unorphan ui` runs it from a checkout. Jev's API is documented at
 [docs.typesafe.ai](https://docs.typesafe.ai/introduction).
