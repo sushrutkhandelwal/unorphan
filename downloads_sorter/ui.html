@@ -1,0 +1,819 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Downloads Sorter</title>
+<link rel="icon" href="data:,">
+<style>
+:root {
+  --bg: #f6f5f1; --panel: #ffffff; --raised: #fbfaf7; --text: #1d1c19; --muted: #6d6a62; --faint: #a19d93;
+  --line: #e7e4dc; --line-strong: #d6d2c7;
+  --accent: #2e6a4c; --accent-ink: #ffffff; --accent-soft: #e3efe7;
+  --warn: #94620a; --warn-soft: #f7ecd6; --danger: #a33b2b; --danger-soft: #f6e1dd;
+  --shadow: 0 1px 2px rgba(30, 25, 15, .06), 0 4px 16px rgba(30, 25, 15, .05);
+  --radius: 10px;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #141412; --panel: #1c1b19; --raised: #22211e; --text: #ecebe5; --muted: #a29f96; --faint: #75726a;
+    --line: #2d2c28; --line-strong: #3b3934;
+    --accent: #63bb8d; --accent-ink: #0f1a14; --accent-soft: #1f3529;
+    --warn: #e0ac4f; --warn-soft: #3a2f1a; --danger: #ec8a79; --danger-soft: #3d2420;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 4px 16px rgba(0, 0, 0, .25);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #141412; --panel: #1c1b19; --raised: #22211e; --text: #ecebe5; --muted: #a29f96; --faint: #75726a;
+  --line: #2d2c28; --line-strong: #3b3934;
+  --accent: #63bb8d; --accent-ink: #0f1a14; --accent-soft: #1f3529;
+  --warn: #e0ac4f; --warn-soft: #3a2f1a; --danger: #ec8a79; --danger-soft: #3d2420;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 4px 16px rgba(0, 0, 0, .25);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--bg); color: var(--text);
+  font: 14px/1.45 ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  padding-bottom: 88px;
+}
+button, input, textarea, select { font: inherit; color: inherit; }
+h1, h2, h3 { margin: 0; font-weight: 650; letter-spacing: -.01em; }
+h1 { font-size: 19px; }
+h2 { font-size: 15px; }
+h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; }
+.muted { color: var(--muted); }
+.faint { color: var(--faint); }
+.small { font-size: 12.5px; }
+
+button {
+  border: 1px solid var(--line-strong); background: var(--panel); border-radius: 8px;
+  padding: 7px 12px; cursor: pointer; white-space: nowrap;
+}
+button:hover { background: var(--raised); }
+button:disabled { opacity: .5; cursor: default; }
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+button.primary:hover { filter: brightness(1.06); }
+button.link { border: 0; background: none; padding: 2px 4px; color: var(--muted); }
+button.link:hover { color: var(--text); background: none; }
+button.danger:hover { color: var(--danger); }
+input[type=text], input[type=search], input[type=password], textarea, select {
+  width: 100%; border: 1px solid var(--line-strong); background: var(--panel); border-radius: 8px; padding: 7px 9px;
+}
+textarea { resize: vertical; min-height: 64px; line-height: 1.4; }
+input:focus, textarea:focus, select:focus, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* ---- layout */
+.top {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+  padding: 18px 24px; border-bottom: 1px solid var(--line); background: var(--panel);
+}
+.top .sub { margin: 2px 0 0; color: var(--muted); font-size: 12.5px; word-break: break-all; }
+.top .actions { display: flex; gap: 8px; }
+.layout { display: grid; grid-template-columns: 360px minmax(0, 1fr); gap: 20px; padding: 20px 24px; max-width: 1480px; margin: 0 auto; }
+@media (max-width: 920px) {
+  .layout { grid-template-columns: minmax(0, 1fr); padding: 16px; }
+  .layout > aside { order: 2; }
+  .top { padding: 14px 16px; }
+}
+
+/* ---- folders panel */
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); padding: 16px; align-self: start; }
+@media (min-width: 921px) { .panel { position: sticky; top: 16px; max-height: calc(100vh - 32px); overflow: auto; } }
+.panel-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.panel > p { margin: 6px 0 14px; font-size: 12.5px; }
+.section-label { display: flex; justify-content: space-between; align-items: center; margin: 18px 0 8px; }
+.card { border: 1px solid var(--line); border-radius: 8px; padding: 10px; background: var(--raised); margin-bottom: 8px; }
+.card .row1 { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+.card .name { font-weight: 600; word-break: break-word; }
+.card textarea { min-height: 112px; font-size: 13px; }
+.proj input[type=checkbox] { accent-color: var(--accent); }
+.newform { border: 1px dashed var(--line-strong); border-radius: 8px; padding: 10px; margin-bottom: 10px; display: grid; gap: 8px; }
+.newform .btns { display: flex; gap: 8px; justify-content: flex-end; }
+.proj { border-bottom: 1px solid var(--line); padding: 7px 0; }
+.proj:last-child { border-bottom: 0; }
+.proj .line { display: flex; align-items: center; gap: 8px; }
+.proj label { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; cursor: pointer; }
+.proj .pname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.proj.off .pname { color: var(--faint); text-decoration: line-through; }
+.proj .hintdot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); flex: none; }
+.proj .more { padding: 8px 0 4px 24px; display: grid; gap: 6px; font-size: 12.5px; }
+.proj .auto { color: var(--muted); max-height: 7.5em; overflow: auto; }
+.empty-note { font-size: 12.5px; color: var(--muted); padding: 8px 0; }
+.dirty { position: sticky; bottom: -16px; margin: 12px -16px -16px; padding: 12px 16px; background: var(--warn-soft); border-top: 1px solid var(--line); display: grid; gap: 8px; }
+.dirty p { margin: 0; font-size: 12.5px; }
+
+/* ---- results */
+.status { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); padding: 14px 16px; margin-bottom: 16px; display: grid; gap: 12px; }
+.status .bar { height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
+.status .bar > div { height: 100%; background: var(--accent); width: 0; transition: width .3s; }
+.chips { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.chip { border-radius: 999px; padding: 3px 10px; font-size: 12.5px; background: var(--raised); border: 1px solid var(--line); }
+.chip b { font-variant-numeric: tabular-nums; }
+.controls { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+.controls label { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--muted); }
+.controls input[type=range] { width: 140px; accent-color: var(--accent); }
+.controls .search { flex: 1; min-width: 180px; }
+.error { background: var(--danger-soft); color: var(--danger); border-radius: 8px; padding: 10px 12px; white-space: pre-wrap; }
+
+.group { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); margin-bottom: 16px; overflow: hidden; }
+.group-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--line); cursor: default; }
+.group-head .left { display: flex; align-items: baseline; gap: 10px; }
+.group-head .desc { font-size: 12.5px; color: var(--muted); }
+details.group > summary { list-style: none; cursor: pointer; }
+details.group > summary::-webkit-details-marker { display: none; }
+details.group > summary .left::before { content: "▸"; color: var(--faint); margin-right: 2px; }
+details.group[open] > summary .left::before { content: "▾"; }
+details.group:not([open]) > summary { border-bottom: 0; }
+
+.item { display: grid; grid-template-columns: 22px 44px minmax(0, 1fr) 220px 64px; gap: 12px; align-items: center; padding: 9px 16px; border-bottom: 1px solid var(--line); }
+.item:last-child { border-bottom: 0; }
+.subhead { display: flex; justify-content: space-between; padding: 7px 16px; font-size: 12px; font-weight: 600; color: var(--muted); background: var(--raised); border-bottom: 1px solid var(--line); }
+.subhead .who { color: var(--text); }
+.item:hover { background: var(--raised); }
+.item input[type=checkbox] { width: 16px; height: 16px; accent-color: var(--accent); margin: 0; }
+.thumb { width: 44px; height: 44px; border-radius: 6px; background: var(--raised); border: 1px solid var(--line); display: grid; place-items: center; overflow: hidden; font-size: 9.5px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; }
+.thumb img { width: 100%; height: 100%; object-fit: cover; cursor: zoom-in; }
+.iname { font-weight: 550; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.imeta { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.imeta .pic { color: var(--accent); }
+.item select { padding: 5px 7px; font-size: 13px; }
+.conf { justify-self: end; font-size: 12px; font-variant-numeric: tabular-nums; border-radius: 999px; padding: 2px 8px; background: var(--raised); color: var(--muted); border: 1px solid var(--line); }
+.conf.hi { background: var(--accent-soft); color: var(--accent); border-color: transparent; font-weight: 600; }
+.conf.mid { background: var(--warn-soft); color: var(--warn); border-color: transparent; }
+@media (max-width: 720px) {
+  .item { grid-template-columns: 22px 44px minmax(0, 1fr) 56px; }
+  .item select { grid-column: 3 / 5; }
+  .item .conf { grid-row: 1; grid-column: 4; }
+}
+
+.movebar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 5;
+  display: flex; justify-content: center; padding: 12px 16px; pointer-events: none;
+}
+.movebar .inner {
+  pointer-events: auto; display: flex; align-items: center; gap: 16px; background: var(--panel);
+  border: 1px solid var(--line-strong); border-radius: 12px; box-shadow: 0 8px 30px rgba(0,0,0,.15); padding: 10px 12px 10px 18px;
+  max-width: 100%;
+}
+.movebar .count { font-variant-numeric: tabular-nums; }
+.toast {
+  position: fixed; left: 50%; bottom: 84px; transform: translateX(-50%); z-index: 6;
+  background: var(--text); color: var(--bg); border-radius: 10px; padding: 10px 14px; box-shadow: var(--shadow);
+  display: flex; gap: 12px; align-items: center; max-width: calc(100vw - 32px);
+}
+.toast button { background: transparent; color: inherit; border-color: currentColor; padding: 4px 10px; }
+.lightbox { position: fixed; inset: 0; background: rgba(0,0,0,.7); display: grid; place-items: center; z-index: 10; padding: 24px; cursor: zoom-out; }
+.lightbox img { max-width: 100%; max-height: 100%; border-radius: 8px; box-shadow: 0 10px 40px rgba(0,0,0,.4); }
+.lightbox p { color: #fff; margin: 10px 0 0; text-align: center; font-size: 13px; }
+
+/* ---- setup banner + settings drawer */
+.setup { background: var(--warn-soft); border-radius: 8px; padding: 12px 14px; display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+.setup ul { margin: 4px 0 0; padding-left: 18px; }
+.drawer-back { position: fixed; inset: 0; background: rgba(0,0,0,.35); z-index: 20; }
+.drawer {
+  position: fixed; top: 0; right: 0; bottom: 0; width: min(620px, 100vw); z-index: 21;
+  background: var(--panel); border-left: 1px solid var(--line); box-shadow: -10px 0 40px rgba(0,0,0,.15);
+  display: grid; grid-template-rows: auto minmax(0, 1fr) auto;
+}
+.drawer-head, .drawer-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 20px; border-bottom: 1px solid var(--line); }
+.drawer-foot { border-bottom: 0; border-top: 1px solid var(--line); flex-wrap: wrap; }
+.drawer-foot .where { font-size: 12px; color: var(--faint); }
+.drawer-body { overflow: auto; padding: 4px 20px 20px; }
+.set { padding: 16px 0; border-bottom: 1px solid var(--line); display: grid; gap: 8px; }
+.set:last-child { border-bottom: 0; }
+.set h3 { color: var(--text); text-transform: none; letter-spacing: 0; font-size: 14px; }
+.set .hint { margin: 0; font-size: 12.5px; color: var(--muted); }
+.pathrow { display: flex; gap: 8px; }
+.pathrow input { flex: 1; min-width: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; }
+.check { margin: 0; font-size: 12.5px; color: var(--muted); }
+.check.ok { color: var(--accent); }
+.check.bad, .field-error { color: var(--danger); font-size: 12.5px; margin: 0; }
+.root { border: 1px solid var(--line); border-radius: 8px; padding: 9px 10px; background: var(--raised); display: grid; gap: 4px; }
+.root .rhead { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.root code { font-size: 12.5px; word-break: break-all; }
+.root .names { font-size: 12px; color: var(--muted); max-height: 6.5em; overflow: auto; }
+.root.missing { border-color: var(--danger); }
+.inline { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.inline input[type=checkbox] { accent-color: var(--accent); width: 16px; height: 16px; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 560px) { .grid2 { grid-template-columns: 1fr; } .pathrow { flex-wrap: wrap; } }
+.keystate { font-size: 13px; }
+.keystate.ok { color: var(--accent); }
+.keystate.bad { color: var(--danger); }
+[hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<header class="top">
+  <div>
+    <h1>Downloads Sorter</h1>
+    <p class="sub" id="paths">Loading…</p>
+  </div>
+  <div class="actions">
+    <button id="undo" title="Put back everything from the most recent move">Undo last move</button>
+    <button id="rescan" title="Look again. Files Jev has already seen cost nothing.">Rescan</button>
+    <button id="open-settings">Settings</button>
+  </div>
+</header>
+
+<div class="layout">
+  <aside class="panel" aria-label="Folders">
+    <div class="panel-head">
+      <h2>Folders</h2>
+      <button id="add-folder">+ New folder</button>
+    </div>
+    <p class="muted">Jev files each download into one of these. Your own folders are for anything broader than one project, like a company or a client. Describe what belongs in each one.</p>
+
+    <form class="newform" id="newform" hidden>
+      <input type="text" id="new-name" placeholder="Folder name, e.g. Northwind" maxlength="60" required>
+      <textarea id="new-desc" placeholder="What goes in it, e.g. Northwind Studio, the agency I freelance for: contracts, brand guidelines, client decks, briefs and invoices." required></textarea>
+      <div class="btns"><button type="button" id="new-cancel" class="link">Cancel</button><button type="submit" class="primary">Add folder</button></div>
+    </form>
+
+    <div class="section-label"><h3>Your folders</h3></div>
+    <div id="custom-list"></div>
+
+    <div class="section-label"><h3>Projects <span id="proj-count" class="faint"></span></h3></div>
+    <input type="search" id="proj-filter" placeholder="Filter projects" aria-label="Filter projects">
+    <div id="project-list" style="margin-top:6px"></div>
+
+    <div class="dirty" id="dirty" hidden>
+      <p><b>Folder changes aren't saved yet.</b> Saving makes Jev look at every file again with the new folders, which costs a few cents.</p>
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button id="discard" class="link">Discard</button>
+        <button id="save" class="primary">Save &amp; rescan</button>
+      </div>
+    </div>
+  </aside>
+
+  <main>
+    <div class="status">
+      <div id="progress" hidden>
+        <div class="chips" style="justify-content:space-between;margin-bottom:8px"><span id="progress-text">Asking Jev…</span><span class="faint small">Only names, and small copies of images, are sent.</span></div>
+        <div class="bar"><div id="progress-bar"></div></div>
+      </div>
+      <div class="setup" id="setup" hidden><div><b>Finish setting up</b><ul id="setup-list"></ul></div><button class="primary" id="setup-open">Open settings</button></div>
+      <div id="scan-error" class="error" hidden></div>
+      <div class="chips" id="summary"></div>
+      <div class="controls">
+        <label>Auto-select at <input type="range" id="threshold" min="50" max="99" step="1"> <b id="threshold-val"></b></label>
+        <input type="search" id="search" class="search" placeholder="Filter files" aria-label="Filter files">
+      </div>
+    </div>
+
+    <section class="group" id="g-ready">
+      <div class="group-head"><div class="left"><h2>Ready to move</h2><span class="desc" id="c-ready"></span></div><button class="link" data-toggle="ready">Untick all</button></div>
+      <div class="rows"></div>
+    </section>
+    <section class="group" id="g-review">
+      <div class="group-head"><div class="left"><h2>Needs a look</h2><span class="desc" id="c-review"></span></div><button class="link" data-toggle="review">Tick all</button></div>
+      <div class="rows"></div>
+    </section>
+    <details class="group" id="g-none">
+      <summary class="group-head"><div class="left"><h2>No match</h2><span class="desc" id="c-none"></span></div></summary>
+      <div class="rows"></div>
+    </details>
+  </main>
+</div>
+
+<div class="drawer-back" id="settings-back" hidden></div>
+<section class="drawer" id="settings" hidden role="dialog" aria-modal="true" aria-labelledby="settings-title">
+  <div class="drawer-head"><h2 id="settings-title">Settings</h2><button class="link" id="settings-close">Close</button></div>
+  <div class="drawer-body">
+    <div class="set">
+      <h3>Folder to organize</h3>
+      <p class="hint">The messy folder. Everything loose in it gets sorted.</p>
+      <div class="pathrow"><input type="text" id="s-downloads" spellcheck="false"><button class="choose" data-for="s-downloads" data-prompt="Choose the folder to organize">Choose…</button></div>
+      <p class="check" id="s-downloads-check"></p>
+    </div>
+    <div class="set">
+      <h3>Where sorted files go</h3>
+      <p class="hint">A folder is made in here for each destination. A name on its own, like <code>projects</code>, means a folder inside the one you're organizing.</p>
+      <div class="pathrow"><input type="text" id="s-dest" placeholder="projects" spellcheck="false"><button class="choose" data-for="s-dest" data-prompt="Choose where sorted files go">Choose…</button></div>
+      <p class="check" id="s-dest-check"></p>
+    </div>
+    <div class="set">
+      <h3>Where your projects are</h3>
+      <p class="hint">Folders that hold your code projects. Every folder inside them becomes a place to file things, and Jev learns what each one is from its CLAUDE.md, README or AGENTS.md.</p>
+      <p class="check" id="roots-auto" hidden>Nothing chosen yet, so these were found automatically. Add or remove one to pick your own.</p>
+      <div id="s-roots" style="display:grid;gap:8px"></div>
+      <div class="pathrow"><input type="text" id="s-root-new" placeholder="Add a folder, e.g. ~/code" spellcheck="false"><button class="choose" data-for="s-root-new" data-prompt="Choose a folder that holds your projects">Choose…</button><button id="s-root-add">Add</button></div>
+      <p class="check" id="s-root-new-check"></p>
+      <label class="inline"><input type="checkbox" id="s-nested"> Also look inside folders that only hold projects, like a “personal” folder full of projects</label>
+    </div>
+    <div class="set">
+      <h3>Jev API key</h3>
+      <p class="keystate" id="s-key-state"></p>
+      <p class="hint">Get one at <a href="https://console.typesafe.ai/keys" target="_blank" rel="noopener">console.typesafe.ai/keys</a>. Paste it here, or point to a <code>.env</code> file that has <code>TYPESAFE_API_KEY</code> or <code>JEV_API_KEY</code>. A <code>TYPESAFE_API_KEY</code> environment variable wins over both.</p>
+      <div class="grid2">
+        <label class="small muted" style="display:grid;gap:4px">Paste a key<input type="password" id="s-key" autocomplete="off" placeholder="Leave empty to keep the current one"></label>
+        <label class="small muted" style="display:grid;gap:4px">Or a .env file<input type="text" id="s-env" spellcheck="false" placeholder="~/project/.env"></label>
+      </div>
+      <p class="field-error" id="e-env_file" hidden></p>
+      <button class="link small" id="s-key-clear" hidden style="justify-self:start">Remove the saved key</button>
+    </div>
+    <div class="set">
+      <h3>Sorting</h3>
+      <div class="grid2">
+        <label class="small muted" style="display:grid;gap:4px">Tick files automatically at <b id="s-threshold-val" style="color:var(--text)"></b><input type="range" id="s-threshold" min="50" max="99" step="1" style="accent-color:var(--accent)"></label>
+        <label class="small muted" style="display:grid;gap:4px">Picture size sent to Jev<select id="s-size"><option value="512">Small (512 px)</option><option value="768">Medium (768 px)</option><option value="1024">Large (1024 px)</option><option value="1568">Largest (1568 px)</option></select></label>
+      </div>
+      <label class="inline"><input type="checkbox" id="s-images"> Send small copies of images to Jev (otherwise only names are sent)</label>
+      <label class="small muted" style="display:grid;gap:4px">Never touch files matching (one pattern per line)<textarea id="s-ignore" spellcheck="false" placeholder="*.dmg&#10;github-recovery-codes*"></textarea></label>
+    </div>
+  </div>
+  <div class="drawer-foot">
+    <span class="where" id="s-where"></span>
+    <span style="display:flex;gap:8px;margin-left:auto"><button id="settings-cancel" class="link">Cancel</button><button id="settings-save" class="primary">Save</button></span>
+    <p class="field-error" id="s-error" hidden style="flex-basis:100%"></p>
+  </div>
+</section>
+
+<div class="movebar"><div class="inner">
+  <span class="count" id="sel-count">Nothing selected</span>
+  <button class="primary" id="move" disabled>Move</button>
+</div></div>
+<div class="toast" id="toast" hidden><span id="toast-text"></span><button id="toast-undo" hidden>Undo</button></div>
+<div class="lightbox" id="lightbox" hidden><div><img id="lightbox-img" alt=""><p id="lightbox-cap"></p></div></div>
+
+<script>
+"use strict";
+const TOKEN = "__TOKEN__";
+const NO = "no_project";
+const $ = (sel) => document.querySelector(sel);
+
+let S = { folders: [], saved: "[]", items: [], threshold: 0.8, picks: new Map() };
+
+async function api(path, body) {
+  const opts = { headers: { "X-Token": TOKEN } };
+  if (body !== undefined) { opts.method = "POST"; opts.body = JSON.stringify(body); opts.headers["Content-Type"] = "application/json"; }
+  const r = await fetch(path, opts);
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.error || r.statusText);
+  return data;
+}
+
+function el(tag, props = {}, ...kids) {
+  const n = document.createElement(tag);
+  for (const [k, v] of Object.entries(props)) {
+    if (k === "class") n.className = v;
+    else if (k === "text") n.textContent = v;
+    else if (k.startsWith("on")) n.addEventListener(k.slice(2), v);
+    else if (v !== false && v != null) n.setAttribute(k, v === true ? "" : v);
+  }
+  for (const k of kids.flat()) if (k != null) n.append(k);
+  return n;
+}
+
+let toastTimer;
+function toast(msg, withUndo = false) {
+  $("#toast-text").textContent = msg;
+  $("#toast-undo").hidden = !withUndo;
+  $("#toast").hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => ($("#toast").hidden = true), withUndo ? 9000 : 5000);
+}
+
+/* ------------------------------------------------------------ folders */
+
+function folderSettings() {
+  return {
+    custom: S.folders.filter((f) => f.custom).map((f) => ({ name: f.name, description: f.description })),
+    notes: Object.fromEntries(S.folders.filter((f) => !f.custom && f.hint).map((f) => [f.name, f.hint])),
+    disabled: S.folders.filter((f) => !f.custom && !f.enabled).map((f) => f.name),
+  };
+}
+function markDirty() { $("#dirty").hidden = JSON.stringify(folderSettings()) === S.saved; }
+
+function renderFolders() {
+  const custom = S.folders.filter((f) => f.custom);
+  const list = $("#custom-list");
+  list.replaceChildren();
+  if (!custom.length) list.append(el("div", { class: "empty-note", text: "None yet. Add one for things that belong to a company or client rather than one project." }));
+  for (const f of custom) {
+    const ta = el("textarea", { "aria-label": `What goes in ${f.name}`, oninput: (e) => { f.description = e.target.value; markDirty(); } });
+    ta.value = f.description;
+    list.append(el("div", { class: "card" },
+      el("div", { class: "row1" },
+        el("span", { class: "name", text: f.name }),
+        el("button", { class: "link danger small", text: "Remove", onclick: () => { S.folders = S.folders.filter((x) => x !== f); renderFolders(); markDirty(); } })),
+      ta));
+  }
+
+  const q = $("#proj-filter").value.trim().toLowerCase();
+  const projects = S.folders.filter((f) => !f.custom);
+  $("#proj-count").textContent = `${projects.filter((p) => p.enabled).length} of ${projects.length} on`;
+  const plist = $("#project-list");
+  plist.replaceChildren();
+  for (const f of projects) {
+    if (q && !f.name.toLowerCase().includes(q)) continue;
+    const box = el("input", { type: "checkbox", checked: f.enabled, onchange: (e) => { f.enabled = e.target.checked; row.classList.toggle("off", !f.enabled); markDirty(); $("#proj-count").textContent = `${projects.filter((p) => p.enabled).length} of ${projects.length} on`; } });
+    const more = el("div", { class: "more", hidden: true });
+    const hint = el("textarea", { placeholder: "Add a hint for Jev, e.g. “cover art and episode files for the podcast”", oninput: (e) => { f.hint = e.target.value; markDirty(); } });
+    hint.value = f.hint || "";
+    more.append(el("div", { class: "auto", text: f.auto || "No description found." }), el("div", { class: "faint", text: f.paths.join(", ") }), hint);
+    const row = el("div", { class: "proj" + (f.enabled ? "" : " off") },
+      el("div", { class: "line" },
+        el("label", { title: f.enabled ? "Jev can file things here" : "Switched off" }, box, el("span", { class: "pname", text: f.name })),
+        f.hint ? el("span", { class: "hintdot", title: "Has a hint" }) : null,
+        el("button", { class: "link small", text: "Details", "aria-expanded": "false", onclick: (e) => { more.hidden = !more.hidden; e.target.setAttribute("aria-expanded", String(!more.hidden)); } })),
+      more);
+    plist.append(row);
+  }
+}
+
+$("#proj-filter").addEventListener("input", renderFolders);
+$("#add-folder").addEventListener("click", () => { $("#newform").hidden = false; $("#new-name").focus(); });
+$("#new-cancel").addEventListener("click", () => { $("#newform").hidden = true; });
+$("#newform").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const name = $("#new-name").value.trim(), description = $("#new-desc").value.trim();
+  if (S.folders.some((f) => f.name.toLowerCase() === name.toLowerCase() && f.custom)) return toast(`You already have a folder called ${name}.`);
+  if (description.length < 10) return toast("Describe what goes in the folder, so Jev knows when to use it.");
+  S.folders.unshift({ name, description, custom: true, enabled: true, hint: "", auto: "", paths: [] });
+  $("#new-name").value = ""; $("#new-desc").value = ""; $("#newform").hidden = true;
+  renderFolders(); markDirty();
+});
+$("#discard").addEventListener("click", () => loadState());
+$("#save").addEventListener("click", async () => {
+  $("#save").disabled = true;
+  try {
+    const r = await api("/api/folders", folderSettings());
+    S.folders = r.folders; S.saved = JSON.stringify(folderSettings());
+    renderFolders(); markDirty();
+    await startScan(false);
+  } catch (err) { toast(err.message); }
+  finally { $("#save").disabled = false; }
+});
+
+/* ------------------------------------------------------------ results */
+
+const enabledNames = () => new Set(S.folders.filter((f) => f.enabled).map((f) => f.name));
+
+function bucket(it) {
+  if (it.error) return "none";
+  if (it.choice && it.choice !== NO && it.choice === it.check && it.confidence >= S.threshold) return "ready";
+  if ((it.choice && it.choice !== NO) || (it.check && it.check !== NO)) return "review";
+  return "none";
+}
+function guess(it) {
+  const ok = enabledNames();
+  for (const c of [it.choice, it.check, ...(it.top || []).map((t) => t[0])]) if (c && c !== NO && ok.has(c)) return c;
+  return "";
+}
+function pick(it) {
+  if (!S.picks.has(it.name)) S.picks.set(it.name, { auto: true });
+  const p = S.picks.get(it.name);
+  if (p.auto) { p.folder = guess(it); p.checked = bucket(it) === "ready" && !!p.folder; }
+  return p;
+}
+
+function folderSelect(it, p, onchange) {
+  const sel = el("select", { "aria-label": `Folder for ${it.name}`, onchange });
+  sel.append(el("option", { value: "", text: "Choose a folder…" }));
+  const custom = S.folders.filter((f) => f.custom), projects = S.folders.filter((f) => !f.custom && f.enabled);
+  if (custom.length) sel.append(el("optgroup", { label: "Your folders" }, custom.map((f) => el("option", { value: f.name, text: f.name }))));
+  sel.append(el("optgroup", { label: "Projects" }, projects.map((f) => el("option", { value: f.name, text: f.name }))));
+  sel.value = p.folder || "";
+  return sel;
+}
+
+function confPill(it, b) {
+  if (it.error) return el("span", { class: "conf", text: "error", title: it.error });
+  const top = (it.top || []).map(([k, v]) => `${k === NO ? "no match" : k} ${Math.round(v * 100)}%`).join(" · ");
+  if (b === "none") return el("span", { class: "conf", text: "—", title: top });
+  if (it.choice !== it.check) return el("span", { class: "conf mid", text: "unsure", title: `Jev wavered between ${it.choice} and ${it.check}. ${top}` });
+  const pct = Math.round(it.confidence * 100);
+  return el("span", { class: "conf " + (it.confidence >= S.threshold ? "hi" : "mid"), text: `${pct}%`, title: top });
+}
+
+function meta(it, b) {
+  const bits = [it.kind, it.size, it.date].filter(Boolean).join(" · ");
+  const span = el("div", { class: "imeta" }, bits);
+  if (it.used_image) span.append(" · ", el("span", { class: "pic", text: "read from picture" }));
+  if (b === "review" && it.top && it.top.length) {
+    const alt = it.top.filter(([k]) => k !== NO).slice(0, 2).map(([k, v]) => `${k} ${Math.round(v * 100)}%`).join(", ");
+    if (alt) span.append(" · Jev: " + alt);
+  }
+  if (it.error) span.append(" · " + it.error);
+  return span;
+}
+
+function thumbFor(it) {
+  if (!it.image) {
+    const ext = it.kind === "folder" ? "dir" : (it.name.includes(".") ? it.name.split(".").pop().slice(0, 4) : "file");
+    return el("div", { class: "thumb", text: ext });
+  }
+  const src = `/api/thumb?s=s&t=${encodeURIComponent(TOKEN)}&name=${encodeURIComponent(it.name)}`;
+  const img = el("img", { src, alt: "", loading: "lazy", onclick: () => openLightbox(it) });
+  return el("div", { class: "thumb" }, img);
+}
+function openLightbox(it) {
+  $("#lightbox-img").src = `/api/thumb?s=l&t=${encodeURIComponent(TOKEN)}&name=${encodeURIComponent(it.name)}`;
+  $("#lightbox-cap").textContent = it.name;
+  $("#lightbox").hidden = false;
+}
+$("#lightbox").addEventListener("click", () => ($("#lightbox").hidden = true));
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") $("#lightbox").hidden = true; });
+
+function renderItems() {
+  const q = $("#search").value.trim().toLowerCase();
+  const groups = { ready: [], review: [], none: [] };
+  for (const it of S.items) groups[bucket(it)].push(it);
+  for (const [key, list] of Object.entries(groups)) {
+    const rows = $(`#g-${key} .rows`);
+    rows.replaceChildren();
+    list.sort((a, b) => (guess(a) || "~").localeCompare(guess(b) || "~") || a.name.localeCompare(b.name));
+    let shown = 0, lastFolder = null;
+    const perFolder = {};
+    for (const it of list) perFolder[guess(it)] = (perFolder[guess(it)] || 0) + 1;
+    for (const it of list) {
+      if (q && !it.name.toLowerCase().includes(q) && !(guess(it) || "").toLowerCase().includes(q)) continue;
+      shown++;
+      const g = guess(it);
+      if (key !== "none" && g !== lastFolder) {
+        lastFolder = g;
+        const custom = S.folders.some((f) => f.custom && f.name === g);
+        rows.append(el("div", { class: "subhead" }, el("span", {}, key === "ready" ? "Into " : "Best guess: ", el("span", { class: "who", text: g || "none" }), custom ? " · your folder" : ""), el("span", { text: `${perFolder[g]}` })));
+      }
+      const p = pick(it);
+      const box = el("input", { type: "checkbox", "aria-label": `Move ${it.name}`, checked: p.checked, onchange: (e) => { p.auto = false; p.checked = e.target.checked; if (p.checked && !p.folder) { p.checked = false; e.target.checked = false; toast("Choose a folder for it first."); } updateBar(); } });
+      const sel = folderSelect(it, p, (e) => { p.auto = false; p.folder = e.target.value; p.checked = !!p.folder; box.checked = p.checked; updateBar(); });
+      rows.append(el("div", { class: "item" }, box, thumbFor(it),
+        el("div", { style: "min-width:0" }, el("div", { class: "iname", text: it.name, title: it.name }), meta(it, key)),
+        sel, confPill(it, key)));
+    }
+    if (!shown) rows.append(el("div", { class: "empty-note", style: "padding:12px 16px", text: S.items.length ? (q ? "Nothing matches the filter." : "Nothing here.") : "Waiting for results…" }));
+    $(`#c-${key}`).textContent = `${list.length} item${list.length === 1 ? "" : "s"}`;
+  }
+  $("#summary").replaceChildren(
+    el("span", { class: "chip" }, el("b", { text: groups.ready.length }), " ready"),
+    el("span", { class: "chip" }, el("b", { text: groups.review.length }), " to look at"),
+    el("span", { class: "chip" }, el("b", { text: groups.none.length }), " no match"));
+  updateBar();
+}
+
+function selected() {
+  const names = new Set(S.items.map((i) => i.name));
+  return [...S.picks.entries()].filter(([n, p]) => names.has(n) && p.checked && p.folder).map(([name, p]) => ({ name, folder: p.folder }));
+}
+function updateBar() {
+  const sel = selected();
+  const folders = new Set(sel.map((s) => s.folder));
+  $("#sel-count").textContent = sel.length ? `${sel.length} file${sel.length === 1 ? "" : "s"} into ${folders.size} folder${folders.size === 1 ? "" : "s"}` : "Nothing selected";
+  $("#move").disabled = !sel.length;
+  $("#move").textContent = sel.length ? `Move ${sel.length}` : "Move";
+}
+
+document.querySelectorAll("[data-toggle]").forEach((btn) => btn.addEventListener("click", () => {
+  const key = btn.dataset.toggle;
+  const list = S.items.filter((it) => bucket(it) === key);
+  const anyOn = list.some((it) => pick(it).checked);
+  const on = key === "ready" ? !anyOn : !list.every((it) => pick(it).checked);
+  for (const it of list) { const p = pick(it); if (p.folder) { p.auto = false; p.checked = on; } }
+  btn.textContent = key === "ready" ? (on ? "Untick all" : "Tick all") : (on ? "Untick all" : "Tick all");
+  renderItems();
+}));
+
+$("#threshold").addEventListener("input", (e) => {
+  S.threshold = Number(e.target.value) / 100;
+  $("#threshold-val").textContent = `${e.target.value}%`;
+  renderItems();
+});
+$("#search").addEventListener("input", renderItems);
+
+$("#move").addEventListener("click", async () => {
+  const moves = selected();
+  if (!moves.length) return;
+  $("#move").disabled = true;
+  try {
+    const r = await api("/api/move", { moves });
+    const moved = new Set(r.moved_names);
+    S.items = S.items.filter((it) => !moved.has(it.name));
+    renderItems();
+    toast(`Moved ${r.moved} file${r.moved === 1 ? "" : "s"}.` + (r.errors.length ? ` ${r.errors.length} couldn't be moved: ${r.errors[0]}` : ""), r.moved > 0);
+  } catch (err) { toast(err.message); }
+  finally { updateBar(); }
+});
+
+async function undo() {
+  try {
+    const r = await api("/api/undo", {});
+    toast(r.message.split("\n")[0]);
+    await startScan(false);
+  } catch (err) { toast(err.message); }
+}
+$("#undo").addEventListener("click", undo);
+$("#toast-undo").addEventListener("click", () => { $("#toast").hidden = true; undo(); });
+$("#rescan").addEventListener("click", () => startScan(false));
+
+/* ------------------------------------------------------------ scanning */
+
+async function startScan(fresh) {
+  await api("/api/scan", { fresh });
+  pollScan();
+}
+
+let watching = false;  // true while we watch a scan run, so its cost is shown once
+async function pollScan() {
+  const p = await api("/api/progress");
+  $("#scan-error").hidden = p.status !== "error";
+  if (p.status === "error") $("#scan-error").textContent = p.error;
+  $("#progress").hidden = p.status !== "running";
+  $("#rescan").disabled = p.status === "running" || p.status === "setup";
+  if (p.status === "running") {
+    $("#progress-text").textContent = p.total ? `Asking Jev about ${p.total} items… ${p.done} done` : "Reading the folder…";
+    $("#progress-bar").style.width = p.total ? `${(100 * p.done) / p.total}%` : "4%";
+    watching = true;
+    setTimeout(pollScan, 400);
+    return;
+  }
+  if (watching) {
+    watching = false;
+    await loadState(true);
+    if (p.status === "done" && p.tokens) toast(`Jev looked at new files: ${p.tokens.toLocaleString()} tokens, about $${((p.tokens / 1e6) * S.price).toFixed(3)}.`);
+  }
+}
+
+async function loadState(itemsOnly = false) {
+  let st;
+  try { st = await api("/api/state"); } catch (err) { $("#scan-error").hidden = false; $("#scan-error").textContent = err.message; return null; }
+  $("#paths").textContent = `${st.downloads}  →  ${st.dest}/<folder>`;
+  S.price = st.price_per_mtok;
+  $("#setup").hidden = !st.problems.length;
+  $("#setup-list").replaceChildren(...st.problems.map((t) => el("li", { text: t })));
+  if (!itemsOnly || $("#dirty").hidden) {
+    S.folders = st.folders;
+    S.saved = JSON.stringify(folderSettings());
+    renderFolders(); markDirty();
+  }
+  if (!$("#threshold").dataset.set) {
+    S.threshold = st.threshold;
+    $("#threshold").value = Math.round(st.threshold * 100);
+    $("#threshold-val").textContent = `${Math.round(st.threshold * 100)}%`;
+    $("#threshold").dataset.set = "1";
+  }
+  S.items = st.scan.items || [];
+  renderItems();
+  return st;
+}
+
+/* ------------------------------------------------------------ settings */
+
+const ST = { roots: [], touched: false, auto: false, reports: new Map(), clearKey: false };
+
+function debounce(fn, ms = 350) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
+
+async function checkPath(inputId, kind) {
+  const out = $(`#${inputId}-check`);
+  const value = $(`#${inputId}`).value.trim();
+  if (inputId === "s-dest") {
+    const base = $("#s-downloads").value.trim().replace(/\/$/, "");
+    const shown = !value ? `${base}/projects` : (value.startsWith("/") || value.startsWith("~") ? value : `${base}/${value}`);
+    out.className = "check"; out.textContent = `Sorted files go to ${shown}/<folder>. It's created when the first file moves.`;
+    return;
+  }
+  if (!value) { out.textContent = ""; return; }
+  try {
+    const r = await api("/api/check-path", { path: value, kind });
+    out.className = "check " + (r.ok ? "ok" : "bad");
+    out.textContent = r.message;
+    return r;
+  } catch (err) { out.className = "check bad"; out.textContent = err.message; }
+}
+
+function renderRoots() {
+  const box = $("#s-roots");
+  box.replaceChildren();
+  $("#roots-auto").hidden = !(ST.auto && !ST.touched);
+  if (!ST.roots.length) box.append(el("p", { class: "check bad", text: "No project folders yet. Add the folder your projects live in." }));
+  for (const path of ST.roots) {
+    const rep = ST.reports.get(path);
+    const names = rep && rep.projects ? rep.projects : [];
+    const missing = rep && rep.exists === false;
+    const summary = !rep ? "Checking…" : missing ? "This folder doesn't exist." :
+      `${names.length} project${names.length === 1 ? "" : "s"}` + (rep.described != null ? ` · ${rep.described} with a CLAUDE.md, README or AGENTS.md` : "");
+    const list = el("div", { class: "names", hidden: true, text: names.join(", ") || "None" });
+    box.append(el("div", { class: "root" + (missing ? " missing" : "") },
+      el("div", { class: "rhead" }, el("code", { text: path }),
+        el("span", {},
+          names.length ? el("button", { class: "link small", text: "Show", onclick: (e) => { list.hidden = !list.hidden; e.target.textContent = list.hidden ? "Show" : "Hide"; } }) : null,
+          el("button", { class: "link small danger", text: "Remove", onclick: () => { ST.roots = ST.roots.filter((r) => r !== path); ST.touched = true; renderRoots(); } }))),
+      el("div", { class: "check" + (missing ? " bad" : ""), text: summary }),
+      list));
+  }
+}
+
+async function addRoot() {
+  const input = $("#s-root-new");
+  const r = await checkPath("s-root-new", "root");
+  if (!r || !r.ok) return;
+  if (!ST.roots.includes(r.path)) ST.roots.push(r.path);
+  ST.reports.set(r.path, { path: r.path, exists: true, projects: r.projects });
+  ST.touched = true;
+  input.value = ""; $("#s-root-new-check").textContent = "";
+  renderRoots();
+}
+
+function keyState(s) {
+  const el2 = $("#s-key-state");
+  el2.className = "keystate " + (s.key_found ? "ok" : "bad");
+  el2.textContent = s.key_found ? `✓ Using the key from ${s.key_source}.` : `No key yet (${s.key_source}).`;
+  $("#s-key-clear").hidden = !s.key_saved;
+}
+
+async function openSettings() {
+  let s;
+  try { s = await api("/api/settings"); } catch (err) { return toast(err.message); }
+  ST.roots = s.roots.map((r) => r.path);
+  ST.reports = new Map(s.roots.map((r) => [r.path, r]));
+  ST.auto = s.roots.length > 0 && s.roots.every((r) => r.auto);
+  ST.touched = false; ST.clearKey = false;
+  $("#s-downloads").value = s.downloads;
+  $("#s-dest").value = s.dest;
+  $("#s-nested").checked = s.nested_projects;
+  $("#s-env").value = s.env_file;
+  $("#s-key").value = "";
+  $("#s-threshold").value = Math.round(s.threshold * 100);
+  $("#s-threshold-val").textContent = `${Math.round(s.threshold * 100)}%`;
+  $("#s-images").checked = s.send_images;
+  $("#s-size").value = String(s.image_max_side);
+  if ($("#s-size").value !== String(s.image_max_side)) $("#s-size").append(el("option", { value: s.image_max_side, text: `${s.image_max_side} px`, selected: true }));
+  $("#s-ignore").value = s.ignore.join("\n");
+  $("#s-where").textContent = `Saved in ${s.config_path}`;
+  document.querySelectorAll(".choose").forEach((b) => (b.hidden = !s.picker));
+  document.querySelectorAll(".field-error, #s-error").forEach((e) => (e.hidden = true));
+  keyState(s);
+  renderRoots();
+  checkPath("s-downloads", "organize"); checkPath("s-dest", "dest");
+  $("#settings").hidden = false; $("#settings-back").hidden = false;
+  $("#s-downloads").focus();
+}
+function closeSettings() { $("#settings").hidden = true; $("#settings-back").hidden = true; }
+
+async function saveSettings() {
+  const body = {
+    downloads: $("#s-downloads").value,
+    dest: $("#s-dest").value,
+    nested_projects: $("#s-nested").checked,
+    env_file: $("#s-env").value,
+    api_key: $("#s-key").value,
+    clear_api_key: ST.clearKey,
+    threshold: Number($("#s-threshold").value) / 100,
+    send_images: $("#s-images").checked,
+    image_max_side: Number($("#s-size").value),
+    ignore: $("#s-ignore").value.split("\n"),
+  };
+  if (ST.touched || !ST.auto) body.project_roots = ST.roots;
+  $("#settings-save").disabled = true;
+  try {
+    await api("/api/settings", body);
+    closeSettings();
+    $("#threshold").dataset.set = "";
+    S.picks.clear();
+    toast("Settings saved. Looking at your files again…");
+    await loadState();
+    watching = true;
+    pollScan();
+  } catch (err) {
+    $("#s-error").hidden = false; $("#s-error").textContent = err.message;
+  } finally { $("#settings-save").disabled = false; }
+}
+
+document.querySelectorAll(".choose").forEach((btn) => btn.addEventListener("click", async () => {
+  const input = $(`#${btn.dataset.for}`);
+  btn.disabled = true;
+  try {
+    const r = await api("/api/choose-folder", { prompt: btn.dataset.prompt, start: input.value });
+    if (r.path) {
+      input.value = r.path;
+      if (btn.dataset.for === "s-root-new") await addRoot();
+      else checkPath(btn.dataset.for, btn.dataset.for === "s-downloads" ? "organize" : "dest");
+      if (btn.dataset.for === "s-downloads") checkPath("s-dest", "dest");
+    }
+  } catch (err) { toast(err.message); }
+  finally { btn.disabled = false; }
+}));
+$("#s-downloads").addEventListener("input", debounce(() => { checkPath("s-downloads", "organize"); checkPath("s-dest", "dest"); }));
+$("#s-dest").addEventListener("input", debounce(() => checkPath("s-dest", "dest")));
+$("#s-root-new").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); addRoot(); } });
+$("#s-root-add").addEventListener("click", addRoot);
+$("#s-threshold").addEventListener("input", (e) => ($("#s-threshold-val").textContent = `${e.target.value}%`));
+$("#s-key-clear").addEventListener("click", () => { ST.clearKey = true; $("#s-key-state").textContent = "The saved key will be removed when you save."; $("#s-key-clear").hidden = true; });
+$("#open-settings").addEventListener("click", openSettings);
+$("#setup-open").addEventListener("click", openSettings);
+$("#settings-close").addEventListener("click", closeSettings);
+$("#settings-cancel").addEventListener("click", closeSettings);
+$("#settings-back").addEventListener("click", closeSettings);
+$("#settings-save").addEventListener("click", saveSettings);
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("#settings").hidden) closeSettings(); });
+
+loadState().then((st) => { if (st && st.problems.length) openSettings(); pollScan(); });
+</script>
+</body>
+</html>

@@ -1,0 +1,31 @@
+# Easiest: run `downloads-sorter ui` and use Settings, which writes this file for you.
+# By hand: copy to ~/.config/downloads-sorter/config.toml and edit.
+# Every setting is optional; command-line flags override what's here.
+
+# Folders that hold your projects. Every folder directly inside one of these
+# counts as a project. Leave empty to auto-detect ~/dev, ~/code, ~/projects, etc.
+project_roots = ["~/code"]
+
+# Project folder names to leave out.
+exclude_projects = ["google-cloud-sdk"]
+
+# Extra hints for projects whose README / CLAUDE.md don't say much.
+# [project_notes]
+# trailhead = "Hiking trail maps, GPX files and elevation data"
+# low-tide-podcast = "Episodes, cover art and transcripts for the Low Tide podcast"
+
+# Where your API key lives, if it isn't in the TYPESAFE_API_KEY environment variable.
+# The file can define TYPESAFE_API_KEY or JEV_API_KEY.
+# env_file = "~/somewhere/.env"
+# api_key = "..."               # or the key itself (keep this file private)
+
+# downloads = "~/Downloads"     # the folder to organize
+# dest = "projects"             # a bare name = inside the organized folder; or a full path
+# nested_projects = false       # also look inside folders that only hold projects
+# ignore = ["*.dmg", "github-recovery-codes*"]   # Downloads items never to touch
+
+# threshold = 0.8          # minimum Jev confidence to move a file
+# send_images = true       # false = only names are ever sent
+# image_max_side = 768     # images are shrunk to this many px on the longest side (280-1568)
+# image_quality = 60       # JPEG quality of the shrunk copy
+# concurrency = 6
