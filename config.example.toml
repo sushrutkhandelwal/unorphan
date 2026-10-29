@@ -19,10 +19,10 @@ exclude_projects = ["google-cloud-sdk"]
 # env_file = "~/somewhere/.env"
 # api_key = "..."               # or the key itself (keep this file private)
 
-# downloads = "~/Downloads"     # the folder to organize
+# folder = "~/Downloads"        # the folder to organize: Downloads, Desktop, anything
 # dest = "projects"             # a bare name = inside the organized folder; or a full path
 # nested_projects = false       # also look inside folders that only hold projects
-# ignore = ["*.dmg", "github-recovery-codes*"]   # Downloads items never to touch
+# ignore = ["*.dmg", "github-recovery-codes*"]   # items never to touch
 
 # threshold = 0.8          # minimum Jev confidence to move a file
 # send_images = true       # false = only names are ever sent

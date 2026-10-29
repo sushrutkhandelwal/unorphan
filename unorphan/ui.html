@@ -235,7 +235,7 @@ details.group:not([open]) > summary { border-bottom: 0; }
       <h2>Folders</h2>
       <button id="add-folder">+ New folder</button>
     </div>
-    <p class="muted">Jev files each download into one of these. Your own folders are for anything broader than one project, like a company or a client. Describe what belongs in each one.</p>
+    <p class="muted">Jev files each loose item into one of these. Your own folders are for anything broader than one project, like a company or a client. Describe what belongs in each one.</p>
 
     <form class="newform" id="newform" hidden>
       <input type="text" id="new-name" placeholder="Folder name, e.g. Northwind" maxlength="60" required>
@@ -302,8 +302,8 @@ details.group:not([open]) > summary { border-bottom: 0; }
     <div class="set">
       <h3>Folder to organize</h3>
       <p class="hint">The messy folder. Everything loose in it gets sorted.</p>
-      <div class="pathrow"><input type="text" id="s-downloads" spellcheck="false"><button class="choose" data-for="s-downloads" data-prompt="Choose the folder to organize">Choose…</button></div>
-      <p class="check" id="s-downloads-check"></p>
+      <div class="pathrow"><input type="text" id="s-folder" spellcheck="false"><button class="choose" data-for="s-folder" data-prompt="Choose the folder to organize">Choose…</button></div>
+      <p class="check" id="s-folder-check"></p>
     </div>
     <div class="set">
       <h3>Where sorted files go</h3>
@@ -667,7 +667,7 @@ async function pollScan() {
 async function loadState(itemsOnly = false) {
   let st;
   try { st = await api("/api/state"); } catch (err) { $("#scan-error").hidden = false; $("#scan-error").textContent = err.message; return null; }
-  $("#paths").textContent = `${st.downloads}  →  ${st.dest}/<folder>`;
+  $("#paths").textContent = `${st.folder}  →  ${st.dest}/<folder>`;
   S.price = st.price_per_mtok;
   renderProfiles(st.profile);
   $("#setup").hidden = !st.problems.length;
@@ -698,7 +698,7 @@ async function checkPath(inputId, kind) {
   const out = $(`#${inputId}-check`);
   const value = $(`#${inputId}`).value.trim();
   if (inputId === "s-dest") {
-    const base = $("#s-downloads").value.trim().replace(/\/$/, "");
+    const base = $("#s-folder").value.trim().replace(/\/$/, "");
     const shown = !value ? `${base}/projects` : (value.startsWith("/") || value.startsWith("~") ? value : `${base}/${value}`);
     out.className = "check"; out.textContent = `Sorted files go to ${shown}/<folder>. It's created when the first file moves.`;
     return;
@@ -759,7 +759,7 @@ async function openSettings() {
   ST.reports = new Map(s.roots.map((r) => [r.path, r]));
   ST.auto = s.roots.length > 0 && s.roots.every((r) => r.auto);
   ST.touched = false; ST.clearKey = false;
-  $("#s-downloads").value = s.downloads;
+  $("#s-folder").value = s.folder;
   $("#s-dest").value = s.dest;
   $("#s-nested").checked = s.nested_projects;
   $("#s-env").value = s.env_file;
@@ -775,15 +775,15 @@ async function openSettings() {
   document.querySelectorAll(".field-error, #s-error").forEach((e) => (e.hidden = true));
   keyState(s);
   renderRoots();
-  checkPath("s-downloads", "organize"); checkPath("s-dest", "dest");
+  checkPath("s-folder", "organize"); checkPath("s-dest", "dest");
   $("#settings").hidden = false; $("#settings-back").hidden = false;
-  $("#s-downloads").focus();
+  $("#s-folder").focus();
 }
 function closeSettings() { $("#settings").hidden = true; $("#settings-back").hidden = true; }
 
 async function saveSettings() {
   const body = {
-    downloads: $("#s-downloads").value,
+    folder: $("#s-folder").value,
     dest: $("#s-dest").value,
     nested_projects: $("#s-nested").checked,
     env_file: $("#s-env").value,
@@ -818,13 +818,13 @@ document.querySelectorAll(".choose").forEach((btn) => btn.addEventListener("clic
     if (r.path) {
       input.value = r.path;
       if (btn.dataset.for === "s-root-new") await addRoot();
-      else checkPath(btn.dataset.for, btn.dataset.for === "s-downloads" ? "organize" : "dest");
-      if (btn.dataset.for === "s-downloads") checkPath("s-dest", "dest");
+      else checkPath(btn.dataset.for, btn.dataset.for === "s-folder" ? "organize" : "dest");
+      if (btn.dataset.for === "s-folder") checkPath("s-dest", "dest");
     }
   } catch (err) { toast(err.message); }
   finally { btn.disabled = false; }
 }));
-$("#s-downloads").addEventListener("input", debounce(() => { checkPath("s-downloads", "organize"); checkPath("s-dest", "dest"); }));
+$("#s-folder").addEventListener("input", debounce(() => { checkPath("s-folder", "organize"); checkPath("s-dest", "dest"); }));
 $("#s-dest").addEventListener("input", debounce(() => checkPath("s-dest", "dest")));
 $("#s-root-new").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); addRoot(); } });
 $("#s-root-add").addEventListener("click", addRoot);

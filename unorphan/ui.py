@@ -104,7 +104,7 @@ class App:
         saved = core.read_config_file(self.cfg["config_path"])
         key, where = core.find_api_key(self.cfg)
         return {
-            "downloads": pretty(self.cfg["downloads"]),
+            "folder": pretty(self.cfg["folder"]),
             "dest": saved.get("dest", ""),
             "dest_resolved": pretty(self.cfg["dest"]),
             "project_roots": [pretty(Path(r).expanduser()) for r in self.cfg["project_roots"]],
@@ -129,7 +129,7 @@ class App:
         with self.lock:
             scan = dict(self.scan)
         return {
-            "downloads": pretty(self.cfg["downloads"]),
+            "folder": pretty(self.cfg["folder"]),
             "dest": pretty(self.cfg["dest"]),
             "threshold": float(self.cfg["threshold"]),
             "price_per_mtok": PRICE_PER_MTOK,
@@ -178,7 +178,7 @@ class App:
             "name": it.path.name,
             "kind": it.kind,
             "size": it.facts.get("size", ""),
-            "date": it.facts["downloaded"],
+            "date": it.facts["date"],
             "image": it.path.suffix.lower() in IMAGE_EXTS and it.path.is_file(),
             "choice": r.get("choice"),
             "check": r.get("check"),

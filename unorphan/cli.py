@@ -29,7 +29,7 @@ def add_common(p: argparse.ArgumentParser, suppress: bool) -> None:
     d = {"default": argparse.SUPPRESS} if suppress else {}
     p.add_argument("--profile", "-p", help="use this profile instead of the active one", **d)
     p.add_argument("--config", help="use this config file instead of a profile", **d)
-    p.add_argument("--downloads", help="the folder to organize, for this run", **d)
+    p.add_argument("--folder", "--downloads", dest="folder", help="the folder to organize, for this run", **d)
     p.add_argument("--dest", help="where sorted files go, for this run", **d)
     p.add_argument("--projects-root", action="append", help="folder holding your projects; repeatable", **d)
     p.add_argument("--exclude-project", action="append", help="project folder name to leave out; repeatable", **d)
@@ -103,7 +103,7 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
     pd.add_argument("name")
 
     args = ap.parse_args(argv)
-    for name in ("profile", "config", "downloads", "dest", "projects_root", "exclude_project", "threshold",
+    for name in ("profile", "config", "folder", "dest", "projects_root", "exclude_project", "threshold",
                  "image_max_side", "image_quality", "concurrency", "env_file"):
         if not hasattr(args, name):
             setattr(args, name, None)
@@ -115,7 +115,7 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
 
 def overrides_from_args(args: argparse.Namespace) -> dict:
     return {
-        "downloads": args.downloads,
+        "folder": args.folder,
         "dest": args.dest,
         "threshold": args.threshold,
         "image_max_side": args.image_max_side,
@@ -147,13 +147,13 @@ def cmd_status(args: argparse.Namespace) -> int:
     key, where = core.find_api_key(cfg)
     roots = core.root_report(cfg)
     settings = core.load_folder_settings(cfg["folders_path"])
-    loose = len(core.list_items(cfg)) if cfg["downloads"].is_dir() else 0
+    loose = len(core.list_items(cfg)) if cfg["folder"].is_dir() else 0
     info = {
         "profile": cfg["profile"],
         "profiles": core.list_profiles(),
         "config_file": pretty(cfg["config_path"]),
         "folders_file": pretty(cfg["folders_path"]),
-        "organizing": pretty(cfg["downloads"]),
+        "organizing": pretty(cfg["folder"]),
         "loose_items": loose,
         "sorted_into": pretty(cfg["dest"]),
         "project_roots": [{"path": r["path"], "exists": r["exists"], "projects": len(r["projects"]), "auto_detected": r["auto"]} for r in roots],
@@ -324,12 +324,12 @@ def cmd_sort(args: argparse.Namespace) -> int:
     if args.limit:
         paths = sorted(paths, key=lambda p: p.stat().st_mtime, reverse=True)[: args.limit]
     if not paths:
-        print(f"Nothing loose in {pretty(cfg['downloads'])} to sort.")
+        print(f"Nothing loose in {pretty(cfg['folder'])} to sort.")
         return 0
 
     api_key = core.resolve_api_key(cfg)
     enabled = [f for f in folders if f.enabled]
-    print(f"Checking {len(paths)} item(s) in {pretty(cfg['downloads'])} against {len(enabled)} destinations…", file=sys.stderr)
+    print(f"Checking {len(paths)} item(s) in {pretty(cfg['folder'])} against {len(enabled)} destinations…", file=sys.stderr)
     items = [core.build_item(p, cfg) for p in paths]
 
     def progress(done: int, total: int) -> None:

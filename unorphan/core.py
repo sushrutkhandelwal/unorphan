@@ -1,10 +1,11 @@
-"""Finding destinations, describing Downloads items, asking Jev, moving, undoing.
+"""Finding destinations, describing loose items, asking Jev, moving, undoing.
 
 Destinations ("folders") are your code projects plus any custom folders you
-define, such as a folder for a client you work with. Each loose item in Downloads is
+define, such as a folder for a client you work with. Each loose item in the folder being
+organized (Downloads, Desktop, anything) is
 described to Jev (TypeSafe's classification model) by its name, plus a shrunk,
 re-compressed copy if it is an image. Jev picks the folder it belongs in.
-Items are moved to <Downloads>/projects/<folder>/. Your actual project folders
+Items are moved to <that folder>/projects/<destination>/. Your actual project folders
 are only read, never written to.
 """
 
@@ -41,8 +42,8 @@ LOG_NAME = ".unorphan-log.jsonl"
 JEV_MIN_SIDE, JEV_MAX_SIDE = 280, 1568
 
 DEFAULTS = {
-    "downloads": "~/Downloads",  # the folder to organize
-    "dest": None,  # where sorted files go; defaults to <downloads>/projects
+    "folder": "~/Downloads",  # the folder to organize
+    "dest": None,  # where sorted files go; defaults to <folder>/projects
     "project_roots": [],  # folders holding your projects; empty = auto-detect common locations
     "nested_projects": False,  # also look one level into folders that only hold projects
     "exclude_projects": [],
@@ -57,7 +58,7 @@ DEFAULTS = {
     "api_key": None,  # the key itself, if you'd rather keep it here (the file is made private)
 }
 # Settings the UI can change, with how to clean each one up.
-EDITABLE = {"downloads", "dest", "project_roots", "nested_projects", "ignore", "threshold", "send_images", "image_max_side", "env_file", "api_key"}
+EDITABLE = {"folder", "dest", "project_roots", "nested_projects", "ignore", "threshold", "send_images", "image_max_side", "env_file", "api_key"}
 
 AUTO_ROOTS = ["~/dev", "~/code", "~/projects", "~/src", "~/Developer", "~/workspace", "~/repos", "~/git"]
 PROJECT_MARKERS = [
@@ -224,16 +225,20 @@ def load_config(
         folder = profile_dir(name)
         path = folder / "config.toml"
     cfg = dict(DEFAULTS)
-    cfg.update(read_config_file(path, must_exist=explicit))
+    saved = read_config_file(path, must_exist=explicit)
+    if "downloads" in saved and "folder" not in saved:  # the setting's name before 0.3
+        saved["folder"] = saved["downloads"]
+    saved.pop("downloads", None)
+    cfg.update(saved)
     for key, val in (overrides or {}).items():
         if val is not None:
             cfg[key] = val
     cfg["profile"] = name
     cfg["config_path"] = path
     cfg["folders_path"] = folder / "folders.json"
-    cfg["downloads"] = Path(cfg["downloads"]).expanduser()
+    cfg["folder"] = Path(cfg["folder"]).expanduser()
     dest = Path(cfg["dest"]).expanduser() if cfg["dest"] else Path("projects")
-    cfg["dest"] = dest if dest.is_absolute() else cfg["downloads"] / dest  # relative = inside the organized folder
+    cfg["dest"] = dest if dest.is_absolute() else cfg["folder"] / dest  # relative = inside the organized folder
     if validate:
         problems = config_problems(cfg)
         if problems:
@@ -244,8 +249,8 @@ def load_config(
 def config_problems(cfg: dict) -> list[str]:
     """Everything wrong with a config, in plain words. Empty if it's usable."""
     problems = []
-    if not cfg["downloads"].is_dir():
-        problems.append(f"The folder to organize doesn't exist: {cfg['downloads']}")
+    if not cfg["folder"].is_dir():
+        problems.append(f"The folder to organize doesn't exist: {cfg['folder']}")
     if not JEV_MIN_SIDE <= int(cfg["image_max_side"]) <= JEV_MAX_SIDE:
         problems.append(f"Picture size must be between {JEV_MIN_SIDE} and {JEV_MAX_SIDE} px")
     if not 0 < float(cfg["threshold"]) <= 1:
@@ -309,7 +314,7 @@ def save_config(updates: dict, path: Path) -> dict:
     for key, val in updates.items():
         if key not in EDITABLE:
             continue
-        if key in ("downloads", "dest", "env_file"):
+        if key in ("folder", "dest", "env_file"):
             val = str(val or "").strip()
             if not val:
                 data.pop(key, None)
@@ -318,7 +323,7 @@ def save_config(updates: dict, path: Path) -> dict:
             if key == "dest" and not p.is_absolute():
                 data[key] = val  # relative: a folder inside the one being organized
                 continue
-            if key == "downloads" and not p.is_dir():
+            if key == "folder" and not p.is_dir():
                 errors[key] = "That folder doesn't exist."
             elif key == "env_file" and not p.is_file():
                 errors[key] = "That file doesn't exist."
@@ -357,7 +362,9 @@ def save_config(updates: dict, path: Path) -> dict:
         data.pop("api_key", None)
     if errors:
         raise SettingsError(errors)
-    if data.get("dest") and Path(data["dest"]).expanduser() == Path(data.get("downloads", DEFAULTS["downloads"])).expanduser():
+    if "downloads" in data:  # the setting's name before 0.3
+        data.setdefault("folder", data.pop("downloads"))
+    if data.get("dest") and Path(data["dest"]).expanduser() == Path(data.get("folder", DEFAULTS["folder"])).expanduser():
         raise SettingsError({"dest": "Sorted files need their own folder, not the folder being organized."})
     _write_config(data, path)
     return data
@@ -586,7 +593,7 @@ def describe(paths: list[Path], limit: int = 450, snippet: int = 220) -> str:
     return " ".join(parts)[:limit]
 
 
-# --------------------------------------------------------------------------- downloads
+# --------------------------------------------------------------------------- the folder being organized
 
 
 @dataclass
@@ -614,9 +621,9 @@ def human_size(n: float) -> str:
 
 
 def list_items(cfg: dict) -> list[Path]:
-    downloads, dest = cfg["downloads"], cfg["dest"]
+    folder, dest = cfg["folder"], cfg["dest"]
     items = []
-    for p in sorted(downloads.iterdir()):
+    for p in sorted(folder.iterdir()):
         if p.name in SKIP_NAMES or p.name.startswith(".") or p.name.endswith(PARTIAL_SUFFIXES):
             continue
         if p.resolve() == dest.resolve() or any(fnmatch.fnmatch(p.name, g) for g in cfg["ignore"]):
@@ -661,7 +668,7 @@ def shrink_image(path: Path, max_side: int, quality: int, min_side: int = JEV_MI
 def build_item(path: Path, cfg: dict) -> Item:
     kind = kind_of(path)
     st = path.stat()
-    facts: dict = {"name": path.name, "kind": kind, "downloaded": dt.date.fromtimestamp(st.st_mtime).isoformat()}
+    facts: dict = {"name": path.name, "kind": kind, "date": dt.date.fromtimestamp(st.st_mtime).isoformat()}
     if path.is_dir():
         names = sorted(c.name for c in path.iterdir() if not c.name.startswith("."))
         facts["contains"] = names[:25] + ([f"... and {len(names) - 25} more"] if len(names) > 25 else [])
@@ -692,13 +699,15 @@ def folder_criteria(folders: list[Folder]) -> dict[str, str]:
     return crit
 
 
-INSTRUCTIONS = (
-    "`file` is a file or folder sitting loose in someone's Downloads folder. Which of their folders "
-    "should it be filed in? Folders are either one specific project or a broader topic or company. "
-    "Use the file's name, what it contains, and its picture if there is one. When both a specific "
-    f"project and a broader folder fit, pick the specific project. Answer {NO_PROJECT} unless one "
-    "folder clearly fits."
-)
+def instructions(cfg: dict) -> str:
+    """The question Jev answers for every item, naming the folder being organized."""
+    return (
+        f"`file` is a file or folder sitting loose in someone's {cfg['folder'].name or 'home'} folder, which they "
+        "are tidying up. Which of their destination folders should it go in? Each destination is either one "
+        "specific project or a broader topic, client or company. Use the file's name, what it contains, and its "
+        "picture if there is one. When both a specific project and a broader destination fit, pick the specific "
+        f"project. Answer {NO_PROJECT} unless one destination clearly fits."
+    )
 
 
 def cache_key(item: Item, fingerprint: str) -> str:
@@ -727,7 +736,8 @@ async def classify_all(
 
     crit = folder_criteria(folders)
     reverse = dict(reversed(list(crit.items())))
-    fingerprint = hashlib.sha1(json.dumps([crit, INSTRUCTIONS, MODEL, cfg["image_max_side"], cfg["image_quality"]]).encode()).hexdigest()
+    question = instructions(cfg)
+    fingerprint = hashlib.sha1(json.dumps([crit, question, MODEL, cfg["image_max_side"], cfg["image_quality"]]).encode()).hexdigest()
     cache: dict = {}
     if CACHE_PATH.exists():
         try:
@@ -751,8 +761,8 @@ async def classify_all(
                     state["picture"] = Image(item.image)
                     headers = {"TypeSafe-Danger-Zone-Images": "true"}
                 questions = {
-                    "folder": Choice(instructions=INSTRUCTIONS, criteria=crit),
-                    "folder_check": Choice(instructions=INSTRUCTIONS, criteria=reverse),
+                    "folder": Choice(instructions=question, criteria=crit),
+                    "folder_check": Choice(instructions=question, criteria=reverse),
                 }
                 try:
                     try:

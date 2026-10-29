@@ -1,3 +1,3 @@
-"""Sort loose files in your Downloads folder into project folders, using Jev."""
+"""Find a home for the loose files in a folder (Downloads, Desktop, ...), using Jev."""
 
 __version__ = "0.2.0"

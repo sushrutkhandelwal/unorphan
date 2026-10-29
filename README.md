@@ -1,18 +1,19 @@
 # Unorphan
 
-Finds a home for the orphaned files in your Downloads folder.
+Finds a home for the files piling up loose in a folder.
 
-![Unorphan showing twelve downloads grouped under the projects they belong to](docs/sorter.png)
+![Unorphan showing twelve loose files grouped under the projects they belong to](docs/sorter.png)
 
-If you work on a few projects at once, your Downloads folder is where their files pile up: the
-podcast episode you exported, a client's brand guidelines, a CSV from some dashboard, a screenshot
-called `Screenshot 2026-10-12 at 14.02.11.png`. Each one belongs to a project, but nobody files them
-away, so after a month you can't find anything.
+If you work on a few projects at once, files collect wherever they land: Downloads, the Desktop, a
+Screenshots folder, a shared drive's inbox. The podcast episode you exported, a client's brand
+guidelines, a CSV from some dashboard, a screenshot called `Screenshot 2026-10-12 at 14.02.11.png`.
+Each one belongs to a project, but nobody files them away, so after a month you can't find
+anything.
 
-Unorphan looks at everything loose in the folder, works out which of your projects each
-item belongs to, and moves it into a folder for that project. It already knows your projects: it
-reads the README or CLAUDE.md in each of your code folders. You can also add folders of your own
-for things broader than one project, like a company you work with.
+Point Unorphan at the messy folder. It looks at everything loose in it, works out which of your
+projects each item belongs to, and moves it into a folder for that project. It already knows your
+projects: it reads the README or CLAUDE.md in each of your code folders. You can also add folders
+of your own for things broader than one project, like a company you work with.
 
 Nothing moves until you've seen the list and pressed Move, and one click puts it all back.
 
@@ -56,7 +57,8 @@ To update later, run `uv tool upgrade unorphan`. To try it from a clone without 
 
 ![The settings panel](docs/settings.png)
 
-- **Folder to organize** is the messy folder. It's `~/Downloads` unless you change it.
+- **Folder to organize** is the messy folder: Downloads, Desktop, or anything else. It starts as
+  `~/Downloads`, since that's where most loose files end up.
 - **Where sorted files go** is where the project folders get made. The default is a folder called
   `projects` inside the one you're organizing.
 - **Where your projects are** lists the folders that hold your code. Each one shows how many
@@ -134,21 +136,21 @@ Setting it up without the app:
 ```sh
 unorphan status                                   # what's set up, what's missing
 unorphan config                                   # show the settings
-unorphan config set downloads ~/Downloads         # change one
+unorphan config set folder ~/Desktop              # change one
 unorphan config set project_roots ~/code ~/work   # lists take several values
 unorphan config set api_key -                     # asks for the key, without showing it
 unorphan folders add Northwind "Northwind Studio: contracts, brand guidelines, client decks"
 unorphan folders hint trailhead "hiking app: maps, GPX files, elevation data"
 unorphan folders off google-cloud-sdk             # never file into this project
 unorphan profiles add desktop --copy-from default
-unorphan --profile desktop config set downloads ~/Desktop
+unorphan --profile desktop config set folder ~/Desktop
 unorphan profiles use desktop                     # make it the active profile
 ```
 
 | Option | What it does |
 |---|---|
 | `--profile NAME` | Use this profile for one command, without switching |
-| `--downloads PATH` | Organize a different folder for this run |
+| `--folder PATH` | Organize a different folder for this run |
 | `--projects-root PATH` | Look for projects here (repeat for more than one) |
 | `--threshold 0.9` | How sure Jev must be before a file moves |
 | `--no-images` | Send file names only, never pictures |
@@ -194,7 +196,7 @@ below.
 
 | # | Ask | Then run |
 |---|---|---|
-| 1 | *Which folder should I tidy up? Most people start with Downloads.* Check that it exists and say how many loose items it has. | `unorphan config set downloads <path>` |
+| 1 | *Which folder should I tidy up? Downloads and the Desktop are the usual ones, but any folder works.* Check that it exists and say how many loose items it has. If they name more than one, set up the first here and the rest as extra profiles (see step 1). | `unorphan config set folder <path>` |
 | 2 | *Where do your code projects live?* First look for folders that exist: `~/dev`, `~/code`, `~/projects`, `~/src`, `~/Developer`, `~/workspace`, `~/repos`, `~/git`. Offer those that hold project folders (ones with a `.git`, README, CLAUDE.md or package.json). | `unorphan config set project_roots <path> [<path> ...]` |
 | 3 | If one of those holds a folder that is itself full of projects (like `~/dev/personal`): *Should the projects inside {folder} count too?* | Yes: add it to `project_roots` as its own entry. Several of them: `unorphan config set nested_projects true` |
 | 4 | Run `unorphan --list-projects` and show the names. *Is any of these never going to receive files, like tools or SDKs you cloned?* | `unorphan folders off <project>` for each |

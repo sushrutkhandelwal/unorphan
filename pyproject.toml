@@ -1,7 +1,7 @@
 [project]
 name = "unorphan"
 version = "0.2.0"
-description = "Sort loose files in your Downloads folder into project folders, using Jev to classify them."
+description = "Find a home for the loose files piling up in Downloads, Desktop or any folder, using Jev to file each one into the right project."
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = ["typesafe-sdk>=0.7.5,<0.8", "pillow>=10"]
