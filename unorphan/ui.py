@@ -57,29 +57,33 @@ def choose_folder(prompt: str, start: str | None) -> str | None:
 
 
 class App:
-    def __init__(self, config_path: Path | None, overrides: dict):
-        self.config_path = config_path
+    def __init__(self, config_path: Path | None, overrides: dict, profile: str | None = None):
+        self.config_path = config_path  # an explicit --config file; otherwise we work on a profile
+        self.profile = profile
         self.overrides = overrides  # command-line flags; dropped once settings are saved from the UI
         self.token = secrets.token_urlsafe(24)
         self.lock = threading.Lock()
         self.scan = {"status": "idle", "done": 0, "total": 0, "tokens": 0, "items": [], "error": None}
+        self.gen = 0  # bumped when the profile changes, so a scan still running for the old one is ignored
         self.thumbs: dict[tuple[str, int], bytes] = {}
         self.reload()
 
     def reload(self) -> None:
-        self.cfg = core.load_config(self.config_path, self.overrides, validate=False)
+        self.cfg = core.load_config(self.config_path, self.overrides, validate=False, profile=self.profile)
+        self.profile = self.cfg["profile"] if not self.config_path else None
         self.thumbs.clear()
 
     # ----------------------------------------------------------------- state
 
     def problems(self) -> list[str]:
-        out = core.config_problems(self.cfg)
-        key, where = core.find_api_key(self.cfg)
-        if not key:
-            out.append(f"Add your Jev API key ({where}).")
-        if not core.project_roots(self.cfg)[0]:
-            out.append("Add at least one folder that holds your projects.")
-        return out
+        return core.setup_problems(self.cfg)
+
+    def profiles_payload(self) -> dict:
+        return {
+            "active": self.cfg["profile"],
+            "names": core.list_profiles() if not self.config_path else [self.cfg["profile"]],
+            "fixed": bool(self.config_path),  # started with --config: no switching
+        }
 
     def folders_payload(self) -> list[dict]:
         try:
@@ -97,7 +101,7 @@ class App:
         } for f in folders]
 
     def settings_payload(self) -> dict:
-        saved = core.read_config_file(self.config_path)
+        saved = core.read_config_file(self.cfg["config_path"])
         key, where = core.find_api_key(self.cfg)
         return {
             "downloads": pretty(self.cfg["downloads"]),
@@ -116,8 +120,9 @@ class App:
             "key_saved": bool(saved.get("api_key")),
             "image_limits": [JEV_MIN_SIDE, JEV_MAX_SIDE],
             "picker": native_folder_picker(),
-            "config_path": pretty(self.config_path or core.CONFIG_PATH),
-            "folders_path": pretty(core.FOLDERS_PATH),
+            "config_path": pretty(self.cfg["config_path"]),
+            "folders_path": pretty(self.cfg["folders_path"]),
+            "profile": self.profiles_payload(),
         }
 
     def state(self) -> dict:
@@ -129,6 +134,7 @@ class App:
             "threshold": float(self.cfg["threshold"]),
             "price_per_mtok": PRICE_PER_MTOK,
             "problems": self.problems(),
+            "profile": self.profiles_payload(),
             "folders": self.folders_payload(),
             "scan": scan,
         }
@@ -144,29 +150,27 @@ class App:
                 self.scan.update(status="setup", items=[], error=None)
                 return
             self.scan.update(status="running", done=0, total=0, tokens=0, error=None)
-        threading.Thread(target=self._scan, args=(fresh,), daemon=True).start()
+            gen = self.gen
+        threading.Thread(target=self._scan, args=(fresh, gen), daemon=True).start()
 
-    def _scan(self, fresh: bool) -> None:
+    def _scan(self, fresh: bool, gen: int) -> None:
+        def update(**kw) -> None:
+            with self.lock:
+                if gen == self.gen:
+                    self.scan.update(**kw)
+
         try:
             cfg = self.cfg
             folders = core.all_folders(cfg)
             paths = core.list_items(cfg)
-            with self.lock:
-                self.scan["total"] = len(paths)
+            update(total=len(paths))
             api_key = core.resolve_api_key(cfg)
             items = [core.build_item(p, cfg) for p in paths]
-
-            def progress(done: int, total: int) -> None:
-                with self.lock:
-                    self.scan["done"] = done
-
-            tokens = asyncio.run(core.classify_all(items, folders, cfg, api_key, read_cache=not fresh, progress=progress))
-            rows = [self._row(it) for it in items]
-            with self.lock:
-                self.scan.update(status="done", items=rows, tokens=tokens)
+            tokens = asyncio.run(core.classify_all(items, folders, cfg, api_key, read_cache=not fresh,
+                                                   progress=lambda done, total: update(done=done)))
+            update(status="done", items=[self._row(it) for it in items], tokens=tokens)
         except Exception as e:  # shown in the UI
-            with self.lock:
-                self.scan.update(status="error", error=str(e))
+            update(status="error", error=str(e))
 
     def _row(self, it: core.Item) -> dict:
         r = it.result
@@ -187,11 +191,38 @@ class App:
     # ----------------------------------------------------------------- actions
 
     def save_settings(self, body: dict) -> dict:
-        core.save_config(body, self.config_path)
+        core.save_config(body, self.cfg["config_path"])
         self.overrides = {}
         self.reload()
         self.start_scan(fresh=False)
         return {"ok": True, "settings": self.settings_payload()}
+
+    def profile_action(self, body: dict) -> dict:
+        if self.config_path:
+            raise SorterError("Started with --config, so profiles can't be changed here.")
+        action, name = str(body.get("action", "")), str(body.get("name", "")).strip()
+        switch_to = None
+        if action == "use":
+            switch_to = name
+        elif action == "add":
+            core.create_profile(name, self.cfg["profile"] if body.get("copy") else None)
+            switch_to = name
+        elif action == "rename":
+            core.rename_profile(self.cfg["profile"], name)
+            switch_to = name
+        elif action == "delete":
+            core.delete_profile(self.cfg["profile"])
+            switch_to = core.active_profile()
+        else:
+            raise SorterError(f"unknown profile action '{action}'")
+        core.set_active_profile(switch_to)
+        self.profile, self.overrides = switch_to, {}
+        self.reload()
+        with self.lock:
+            self.gen += 1  # forget any scan still running for the previous profile
+            self.scan.update(status="idle", items=[], error=None, tokens=0, done=0, total=0)
+        self.start_scan(fresh=False)
+        return {"ok": True, "profile": self.profiles_payload()}
 
     def check_path(self, path: str, kind: str) -> dict:
         p = Path(path.strip()).expanduser() if path.strip() else None
@@ -317,10 +348,12 @@ def make_handler(app: App, page: str):
             try:
                 body = self._body()
                 if path == "/api/folders":
-                    core.save_folder_settings(body)
+                    core.save_folder_settings(body, app.cfg["folders_path"])
                     return self._json({"ok": True, "folders": app.folders_payload()})
                 if path == "/api/settings":
                     return self._json(app.save_settings(body))
+                if path == "/api/profile":
+                    return self._json(app.profile_action(body))
                 if path == "/api/check-path":
                     return self._json(app.check_path(str(body.get("path", "")), str(body.get("kind", ""))))
                 if path == "/api/choose-folder":
@@ -344,12 +377,12 @@ def make_handler(app: App, page: str):
     return Handler
 
 
-def serve(config_path: Path | None, overrides: dict, port: int = 0, open_browser: bool = True) -> None:
+def serve(config_path: Path | None, overrides: dict, profile: str | None = None, port: int = 0, open_browser: bool = True) -> None:
     page = resources.files(__package__).joinpath("ui.html").read_text(encoding="utf-8")
-    app = App(config_path, overrides)
+    app = App(config_path, overrides, profile)
     server = ThreadingHTTPServer(("127.0.0.1", port), make_handler(app, page))
     url = f"http://127.0.0.1:{server.server_address[1]}/"
-    print(f"Unorphan is running at {url}\nPress Ctrl+C to stop.", flush=True)
+    print(f"Unorphan is running at {url} (profile: {app.cfg['profile']})\nPress Ctrl+C to stop.", flush=True)
     problems = app.problems()
     if problems:
         print("Setup needed (the Settings panel will open): " + " ".join(problems), flush=True)

@@ -205,6 +205,13 @@ details.group:not([open]) > summary { border-bottom: 0; }
 .keystate { font-size: 13px; }
 .keystate.ok { color: var(--accent); }
 .keystate.bad { color: var(--danger); }
+.profile-pick { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--muted); }
+.profile-pick select { width: auto; min-width: 140px; padding: 6px 9px; font-weight: 600; color: var(--text); }
+.modal { position: fixed; z-index: 22; top: 50%; left: 50%; transform: translate(-50%, -50%); width: min(440px, calc(100vw - 32px));
+  background: var(--panel); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 20px 60px rgba(0,0,0,.25); padding: 20px; display: grid; gap: 12px; }
+.modal .btns { display: flex; justify-content: flex-end; gap: 8px; }
+.profile-row { display: flex; gap: 8px; }
+.profile-row input { flex: 1; min-width: 0; }
 [hidden] { display: none !important; }
 </style>
 </head>
@@ -215,6 +222,7 @@ details.group:not([open]) > summary { border-bottom: 0; }
     <p class="sub" id="paths">Loading…</p>
   </div>
   <div class="actions">
+    <label class="profile-pick" id="profile-pick" hidden>Profile <select id="profile-select" aria-label="Profile"></select></label>
     <button id="undo" title="Put back everything from the most recent move">Undo last move</button>
     <button id="rescan" title="Look again. Files Jev has already seen cost nothing.">Rescan</button>
     <button id="open-settings">Settings</button>
@@ -285,6 +293,12 @@ details.group:not([open]) > summary { border-bottom: 0; }
 <section class="drawer" id="settings" hidden role="dialog" aria-modal="true" aria-labelledby="settings-title">
   <div class="drawer-head"><h2 id="settings-title">Settings</h2><button class="link" id="settings-close">Close</button></div>
   <div class="drawer-body">
+    <div class="set" id="s-profile-set">
+      <h3>Profile</h3>
+      <p class="hint">Each profile has its own folder to organize, project folders and folders of your own. Switch between them at the top of the page.</p>
+      <div class="profile-row"><input type="text" id="s-profile-name" maxlength="40" spellcheck="false" aria-label="Profile name"><button id="s-profile-rename">Rename</button><button id="s-profile-delete" class="danger">Delete</button></div>
+      <p class="check" id="s-profile-msg"></p>
+    </div>
     <div class="set">
       <h3>Folder to organize</h3>
       <p class="hint">The messy folder. Everything loose in it gets sorted.</p>
@@ -333,6 +347,16 @@ details.group:not([open]) > summary { border-bottom: 0; }
     <p class="field-error" id="s-error" hidden style="flex-basis:100%"></p>
   </div>
 </section>
+
+<div class="drawer-back" id="newprofile-back" hidden></div>
+<form class="modal" id="newprofile" hidden aria-labelledby="newprofile-title">
+  <h2 id="newprofile-title">New profile</h2>
+  <p class="hint muted small" style="margin:0">A separate setup, for example your Desktop sorted against your client folders.</p>
+  <input type="text" id="np-name" maxlength="40" placeholder="Name, e.g. desktop" spellcheck="false" required>
+  <label class="inline"><input type="checkbox" id="np-copy" checked> Start with a copy of <b id="np-from"></b></label>
+  <p class="field-error" id="np-error" hidden></p>
+  <div class="btns"><button type="button" class="link" id="np-cancel">Cancel</button><button type="submit" class="primary">Create</button></div>
+</form>
 
 <div class="movebar"><div class="inner">
   <span class="count" id="sel-count">Nothing selected</span>
@@ -645,6 +669,7 @@ async function loadState(itemsOnly = false) {
   try { st = await api("/api/state"); } catch (err) { $("#scan-error").hidden = false; $("#scan-error").textContent = err.message; return null; }
   $("#paths").textContent = `${st.downloads}  →  ${st.dest}/<folder>`;
   S.price = st.price_per_mtok;
+  renderProfiles(st.profile);
   $("#setup").hidden = !st.problems.length;
   $("#setup-list").replaceChildren(...st.problems.map((t) => el("li", { text: t })));
   if (!itemsOnly || $("#dirty").hidden) {
@@ -812,6 +837,73 @@ $("#settings-cancel").addEventListener("click", closeSettings);
 $("#settings-back").addEventListener("click", closeSettings);
 $("#settings-save").addEventListener("click", saveSettings);
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("#settings").hidden) closeSettings(); });
+
+/* ------------------------------------------------------------ profiles */
+
+let currentProfile = null;
+function renderProfiles(pr) {
+  currentProfile = pr.active;
+  $("#profile-pick").hidden = pr.fixed;
+  $("#s-profile-set").hidden = pr.fixed;
+  const sel = $("#profile-select");
+  sel.replaceChildren(...pr.names.map((n) => el("option", { value: n, text: n })), el("option", { value: "__new", text: "New profile…" }));
+  sel.value = pr.active;
+  $("#s-profile-name").value = pr.active;
+  $("#s-profile-delete").disabled = pr.names.length < 2;
+  $("#s-profile-delete").title = pr.names.length < 2 ? "This is your only profile" : "";
+}
+
+async function profileAction(body, message) {
+  try {
+    await api("/api/profile", body);
+    S.picks.clear();
+    $("#threshold").dataset.set = "";
+    const st = await loadState();
+    toast(message(st ? st.profile.active : ""));
+    watching = true;
+    pollScan();
+    return true;
+  } catch (err) { toast(err.message); renderProfilesFromServer(); return false; }
+}
+async function renderProfilesFromServer() { try { const st = await api("/api/state"); renderProfiles(st.profile); } catch (_) {} }
+
+$("#profile-select").addEventListener("change", (e) => {
+  const v = e.target.value;
+  if (v === "__new") {
+    e.target.value = currentProfile;
+    $("#np-from").textContent = currentProfile;
+    $("#np-name").value = ""; $("#np-error").hidden = true;
+    $("#newprofile").hidden = false; $("#newprofile-back").hidden = false; $("#np-name").focus();
+    return;
+  }
+  profileAction({ action: "use", name: v }, (n) => `Switched to ${n}.`);
+});
+function closeNewProfile() { $("#newprofile").hidden = true; $("#newprofile-back").hidden = true; }
+$("#np-cancel").addEventListener("click", closeNewProfile);
+$("#newprofile-back").addEventListener("click", closeNewProfile);
+$("#newprofile").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const name = $("#np-name").value.trim();
+  try {
+    await api("/api/profile", { action: "add", name, copy: $("#np-copy").checked });
+  } catch (err) { $("#np-error").hidden = false; $("#np-error").textContent = err.message; return; }
+  closeNewProfile();
+  S.picks.clear(); $("#threshold").dataset.set = "";
+  await loadState();
+  toast(`Created ${name}. Check its settings.`);
+  openSettings();
+});
+$("#s-profile-rename").addEventListener("click", async () => {
+  const name = $("#s-profile-name").value.trim();
+  if (!name || name === currentProfile) return;
+  try { await api("/api/profile", { action: "rename", name }); $("#s-profile-msg").className = "check ok"; $("#s-profile-msg").textContent = `Renamed to ${name}.`; await loadState(true); }
+  catch (err) { $("#s-profile-msg").className = "check bad"; $("#s-profile-msg").textContent = err.message; }
+});
+$("#s-profile-delete").addEventListener("click", async () => {
+  if (!confirm(`Delete the profile "${currentProfile}"? Its settings and folders are removed. Files you've already sorted stay where they are.`)) return;
+  closeSettings();
+  await profileAction({ action: "delete" }, (n) => `Deleted. Now using ${n}.`);
+});
 
 loadState().then((st) => { if (st && st.problems.length) openSettings(); pollScan(); });
 </script>

@@ -106,6 +106,18 @@ rescan only pays for new ones.
 - **Move the slider.** *Auto-select at* changes how sure Jev must be before a file is ticked for
   you. Higher is more cautious.
 
+### Profiles
+
+A profile is one complete setup: the folder to organize, where your projects are, your own folders
+and the rest of the settings. You start with one called `default`. Add more when you want to tidy
+another folder in a different way, for example your Desktop sorted against client folders while
+Downloads is sorted against your code.
+
+Pick a profile from the menu at the top of the app, or choose **New profile…** to make one (it can
+start as a copy of the current one). Rename or delete the current profile at the top of
+**Settings**. Every profile shares the same memory of Jev's answers, so a file is never paid for
+twice.
+
 ## Command line
 
 Everything also works from a terminal, which is handy for a quick tidy or a scheduled job:
@@ -115,17 +127,98 @@ unorphan                  # show what would move; moves nothing
 unorphan --apply          # move it
 unorphan --undo           # put back the last move
 unorphan --list-projects  # every destination, and what Jev is told about it
+unorphan ui               # open the app
+```
+
+Setting it up without the app:
+
+```sh
+unorphan status                                   # what's set up, what's missing
+unorphan config                                   # show the settings
+unorphan config set downloads ~/Downloads         # change one
+unorphan config set project_roots ~/code ~/work   # lists take several values
+unorphan config set api_key -                     # asks for the key, without showing it
+unorphan folders add Northwind "Northwind Studio: contracts, brand guidelines, client decks"
+unorphan folders hint trailhead "hiking app: maps, GPX files, elevation data"
+unorphan folders off google-cloud-sdk             # never file into this project
+unorphan profiles add desktop --copy-from default
+unorphan --profile desktop config set downloads ~/Desktop
+unorphan profiles use desktop                     # make it the active profile
 ```
 
 | Option | What it does |
 |---|---|
+| `--profile NAME` | Use this profile for one command, without switching |
 | `--downloads PATH` | Organize a different folder for this run |
 | `--projects-root PATH` | Look for projects here (repeat for more than one) |
 | `--threshold 0.9` | How sure Jev must be before a file moves |
 | `--no-images` | Send file names only, never pictures |
 | `--only '*.pdf'`, `--limit 20` | Try it on a handful of files first |
-| `--json` | Output for scripts |
+| `--json` | Output for scripts (also works with `status`) |
 | `ui --port 8080 --no-browser` | Run the app on a fixed port without opening a tab |
+
+`unorphan status` exits with code 1 while something is missing, so scripts can check it.
+
+## For AI agents
+
+This section is for coding agents such as Claude Code or Codex that have been asked to set up
+Unorphan for someone. It is a short interview: ask the questions below, then turn the answers into
+`unorphan` commands. Ask one question at a time, offer the default, and don't guess paths. Look
+before you ask, so you can offer real options rather than make the person type paths.
+
+### Ground rules
+
+- Never run `unorphan --apply` or press Move without the person saying yes to the list you showed
+  them. Previews (`unorphan`, `unorphan --limit N`) are fine.
+- Never ask for the API key in the chat, and never print, log or repeat it. The person enters it
+  themselves (step 7), or you point Unorphan at a `.env` file that already has it.
+- Don't write into the person's project folders. Unorphan only reads them.
+- Use the commands below rather than editing the settings files.
+- After every `config set`, check the output. A bad path is refused with a plain-English reason;
+  read it back to the person and ask again.
+
+### 1. Install and look around
+
+```sh
+uv --version              # if missing: https://docs.astral.sh/uv/getting-started/installation/
+uv tool install .         # from inside a clone; otherwise: uv tool install git+<repository URL>
+unorphan status --json    # what's already set up
+```
+
+If `status` shows a profile that's already set up, ask: *"Unorphan is already set up to organize
+{organizing}. Do you want to change that setup, or add a second one for another folder?"* For a
+second one, ask for a short name and run
+`unorphan profiles add <name> --copy-from <current>`, then add `--profile <name>` to every command
+below.
+
+### 2. Ask, then run
+
+| # | Ask | Then run |
+|---|---|---|
+| 1 | *Which folder should I tidy up? Most people start with Downloads.* Check that it exists and say how many loose items it has. | `unorphan config set downloads <path>` |
+| 2 | *Where do your code projects live?* First look for folders that exist: `~/dev`, `~/code`, `~/projects`, `~/src`, `~/Developer`, `~/workspace`, `~/repos`, `~/git`. Offer those that hold project folders (ones with a `.git`, README, CLAUDE.md or package.json). | `unorphan config set project_roots <path> [<path> ...]` |
+| 3 | If one of those holds a folder that is itself full of projects (like `~/dev/personal`): *Should the projects inside {folder} count too?* | Yes: add it to `project_roots` as its own entry. Several of them: `unorphan config set nested_projects true` |
+| 4 | Run `unorphan --list-projects` and show the names. *Is any of these never going to receive files, like tools or SDKs you cloned?* | `unorphan folders off <project>` for each |
+| 5 | *Is there anything bigger than one project whose files you'd like together, such as your company, a client or a side business?* For each: *What should it be called, and what kinds of files belong there?* Help them write the description as a list of file types and topics. | `unorphan folders add "<Name>" "<description>"` |
+| 6 | For projects whose description in step 4 looked thin: *In a sentence, what is {project}?* | `unorphan folders hint <project> "<sentence>"` |
+| 7 | *Do you have a TypeSafe API key?* If not, send them to https://console.typesafe.ai/keys. Then: *Is it in a `.env` file already, or would you like to paste it in?* | `.env` file: `unorphan config set env_file <path>`. Pasting: ask them to run `unorphan config set api_key -` in their own terminal, which asks for the key without showing it, or to paste it into Settings in the app. Then run `unorphan status` to confirm it was found. |
+| 8 | *Unorphan can send Jev a small, low-quality copy of each image so it can tell what a screenshot shows. The contents of documents are never sent. Is that OK?* | No: `unorphan config set send_images false` |
+| 9 | *Are there files it should never touch?* Suggest installers (`*.dmg`, `*.pkg`) and anything private, such as recovery codes. | `unorphan config set ignore "<pattern>" ["<pattern>" ...]` |
+| 10 | Only if they ask about caution: *How sure should Jev be before a file is ticked for you? 80% is the default.* | `unorphan config set threshold <number>` |
+
+Where sorted files go needs no question. The default is a `projects` folder inside the folder being
+organized. Change it only if they bring it up: `unorphan config set dest <path>`.
+
+### 3. Check and show
+
+```sh
+unorphan status           # must end with "Ready." (exit code 0); otherwise fix what it lists
+unorphan --limit 25       # a small preview; costs well under a cent
+```
+
+Show the person the preview grouped by destination. Then ask: *"Shall I move these, or would you
+rather review them in the app?"* For the app, run `unorphan ui`. For the move, run `unorphan --apply`
+and tell them `unorphan --undo` puts everything back.
 
 ## How it decides
 
@@ -169,13 +262,15 @@ folders. Each run shows what it used.
 
 | File | What's in it |
 |---|---|
-| `~/.config/unorphan/config.toml` | Your settings. Only your user account can read it, since it can hold your key. |
-| `~/.config/unorphan/folders.json` | Your own folders, project hints and switched-off projects |
-| `~/.cache/unorphan/cache.json` | Jev's past answers. Safe to delete. |
+| `~/.config/unorphan/profiles/<name>/config.toml` | A profile's settings. Only your user account can read it, since it can hold your key. |
+| `~/.config/unorphan/profiles/<name>/folders.json` | A profile's own folders, project hints and switched-off projects |
+| `~/.config/unorphan/state.json` | Which profile is active |
+| `~/.cache/unorphan/cache.json` | Jev's past answers, shared by all profiles. Safe to delete. |
 | `<sorted files folder>/.unorphan-log.jsonl` | Every move, so it can be undone |
 
 All of them are plain text. Settings can be edited by hand, and
-[`config.example.toml`](config.example.toml) lists every option.
+[`config.example.toml`](config.example.toml) lists every option. Set `UNORPHAN_PROFILE` to pick a
+profile for a whole shell session.
 
 ## Uninstalling
 

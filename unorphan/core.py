@@ -30,8 +30,10 @@ MODEL = "jev-latest"
 PRICE_PER_MTOK = 0.042  # USD per million input tokens; output is free (docs.typesafe.ai/models)
 NO_PROJECT = "no_project"
 CONFIG_DIR = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / APP
-CONFIG_PATH = CONFIG_DIR / "config.toml"
-FOLDERS_PATH = CONFIG_DIR / "folders.json"  # custom folders, hints, switched-off projects (edited by the UI)
+PROFILES_DIR = CONFIG_DIR / "profiles"  # one folder per profile: config.toml + folders.json
+STATE_PATH = CONFIG_DIR / "state.json"  # which profile is active
+DEFAULT_PROFILE = "default"
+PROFILE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,39}$")
 CACHE_PATH = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache")) / APP / "cache.json"
 LOG_NAME = ".unorphan-log.jsonl"
 
@@ -95,14 +97,107 @@ class SorterError(Exception):
     """A problem the user can fix (bad config, missing key, ...)."""
 
 
+# --------------------------------------------------------------------------- profiles
+#
+# A profile is a folder holding config.toml (settings) and folders.json (your
+# own folders, hints, switched-off projects). Profiles let one person organize
+# several folders differently, e.g. Downloads against their code, and Desktop
+# against their clients.
+
+
+def _migrate_single_config() -> None:
+    """Older versions kept config.toml and folders.json directly in CONFIG_DIR."""
+    old = [CONFIG_DIR / "config.toml", CONFIG_DIR / "folders.json"]
+    if PROFILES_DIR.exists() or not any(f.exists() for f in old):
+        return
+    target = PROFILES_DIR / DEFAULT_PROFILE
+    target.mkdir(parents=True)
+    for f in old:
+        if f.exists():
+            f.rename(target / f.name)
+
+
+def list_profiles() -> list[str]:
+    _migrate_single_config()
+    names = sorted((d.name for d in PROFILES_DIR.iterdir() if d.is_dir()), key=str.lower) if PROFILES_DIR.exists() else []
+    return names or [DEFAULT_PROFILE]
+
+
+def active_profile() -> str:
+    """UNORPHAN_PROFILE, else the one last chosen, else the first there is."""
+    names = list_profiles()
+    wanted = os.environ.get("UNORPHAN_PROFILE")
+    if not wanted and STATE_PATH.exists():
+        try:
+            wanted = json.loads(STATE_PATH.read_text()).get("active")
+        except (json.JSONDecodeError, AttributeError):
+            wanted = None
+    if wanted:
+        check_profile_name(wanted)
+        return wanted
+    return names[0]
+
+
+def check_profile_name(name: str) -> str:
+    if not PROFILE_NAME.match(name or ""):
+        raise SorterError(f"'{name}' can't be a profile name. Use letters, numbers, dots, dashes or underscores (up to 40).")
+    return name
+
+
+def profile_dir(name: str) -> Path:
+    return PROFILES_DIR / check_profile_name(name)
+
+
+def set_active_profile(name: str) -> None:
+    if name not in list_profiles():
+        raise SorterError(f"There's no profile called '{name}'. Profiles: {', '.join(list_profiles())}")
+    STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    STATE_PATH.write_text(json.dumps({"active": name}))
+
+
+def create_profile(name: str, copy_from: str | None = None) -> None:
+    target = profile_dir(name)
+    if name.lower() in (n.lower() for n in list_profiles()) and target.exists():
+        raise SorterError(f"There's already a profile called '{name}'.")
+    if copy_from:
+        src = profile_dir(copy_from)
+        if not src.exists():
+            raise SorterError(f"There's no profile called '{copy_from}' to copy.")
+        shutil.copytree(src, target)
+    else:
+        target.mkdir(parents=True)
+
+
+def rename_profile(old: str, new: str) -> None:
+    src, dst = profile_dir(old), profile_dir(new)
+    if not src.exists():
+        raise SorterError(f"There's no profile called '{old}'.")
+    if dst.exists():
+        raise SorterError(f"There's already a profile called '{new}'.")
+    src.rename(dst)
+    if active_profile() == old:
+        set_active_profile(new)
+
+
+def delete_profile(name: str) -> None:
+    names = list_profiles()
+    if name not in names or not profile_dir(name).exists():
+        raise SorterError(f"There's no profile called '{name}'.")
+    if len(names) == 1:
+        raise SorterError("That's the only profile, so it can't be deleted.")
+    was_active = active_profile() == name
+    shutil.rmtree(profile_dir(name))
+    if was_active:
+        set_active_profile(next(n for n in names if n != name))
+
+
 # --------------------------------------------------------------------------- config
 
 
-def read_config_file(path: Path | None = None) -> dict:
+def read_config_file(path: Path, must_exist: bool = False) -> dict:
     """The raw settings saved in config.toml (without defaults)."""
-    path = path or CONFIG_PATH
     if not path.exists():
-        if path != CONFIG_PATH:
+        if must_exist:
             raise SorterError(f"config file not found: {path}")
         return {}
     try:
@@ -112,13 +207,30 @@ def read_config_file(path: Path | None = None) -> dict:
         raise SorterError(f"{path} isn't valid TOML: {e}") from e
 
 
-def load_config(path: Path | None = None, overrides: dict | None = None, validate: bool = True) -> dict:
+def load_config(
+    path: Path | None = None,
+    overrides: dict | None = None,
+    validate: bool = True,
+    profile: str | None = None,
+) -> dict:
+    """Settings for a profile (the active one by default), or from an explicit config file."""
+    explicit = path is not None
+    if explicit:
+        name, folder = path.stem, path.parent  # a one-off config file; its folders.json sits next to it
+    else:
+        name = profile or active_profile()
+        if profile and name not in list_profiles():
+            raise SorterError(f"There's no profile called '{name}'. Profiles: {', '.join(list_profiles())}")
+        folder = profile_dir(name)
+        path = folder / "config.toml"
     cfg = dict(DEFAULTS)
-    cfg.update(read_config_file(path))
+    cfg.update(read_config_file(path, must_exist=explicit))
     for key, val in (overrides or {}).items():
         if val is not None:
             cfg[key] = val
-    cfg["config_path"] = path or CONFIG_PATH
+    cfg["profile"] = name
+    cfg["config_path"] = path
+    cfg["folders_path"] = folder / "folders.json"
     cfg["downloads"] = Path(cfg["downloads"]).expanduser()
     dest = Path(cfg["dest"]).expanduser() if cfg["dest"] else Path("projects")
     cfg["dest"] = dest if dest.is_absolute() else cfg["downloads"] / dest  # relative = inside the organized folder
@@ -166,7 +278,7 @@ def resolve_api_key(cfg: dict) -> str:
         return key
     raise SorterError(
         f"No Jev API key found ({where}). Get one at https://console.typesafe.ai/keys, then add it in the\n"
-        f"UI's Settings, set TYPESAFE_API_KEY, or point env_file in {CONFIG_PATH} at a .env file that has it."
+        f"app's Settings, run `unorphan config set api_key -` and paste it, or set TYPESAFE_API_KEY."
     )
 
 
@@ -190,9 +302,8 @@ def _toml(value) -> str:
     raise TypeError(f"can't save {value!r}")
 
 
-def save_config(updates: dict, path: Path | None = None) -> dict:
-    """Clean up and save settings from the UI. Keeps settings it doesn't know about."""
-    path = path or CONFIG_PATH
+def save_config(updates: dict, path: Path) -> dict:
+    """Clean up and save settings from the UI or `unorphan config set`. Keeps settings it doesn't know about."""
     data = read_config_file(path)
     errors: dict[str, str] = {}
     for key, val in updates.items():
@@ -248,12 +359,39 @@ def save_config(updates: dict, path: Path | None = None) -> dict:
         raise SettingsError(errors)
     if data.get("dest") and Path(data["dest"]).expanduser() == Path(data.get("downloads", DEFAULTS["downloads"])).expanduser():
         raise SettingsError({"dest": "Sorted files need their own folder, not the folder being organized."})
+    _write_config(data, path)
+    return data
+
+
+def unset_config(keys: list[str], path: Path) -> dict:
+    """Remove settings, so their defaults apply again."""
+    unknown = [k for k in keys if k not in DEFAULTS]
+    if unknown:
+        raise SorterError(f"Unknown setting: {', '.join(unknown)}. Settings: {', '.join(sorted(EDITABLE))}")
+    data = read_config_file(path)
+    for k in keys:
+        data.pop(k, None)
+    _write_config(data, path)
+    return data
+
+
+def _write_config(data: dict, path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    lines = ["# unorphan settings. Edited by the app's Settings panel; safe to edit by hand.", ""]
+    lines = ["# unorphan settings. Edited by the app's Settings panel or `unorphan config set`; safe to edit by hand.", ""]
     lines += [f"{k} = {_toml(v)}" for k, v in data.items() if v is not None]
     path.write_text("\n".join(lines) + "\n")
     path.chmod(0o600)  # it may hold an API key
-    return data
+
+
+def setup_problems(cfg: dict) -> list[str]:
+    """What's stopping a scan, in plain words. Empty when everything is ready."""
+    out = config_problems(cfg)
+    key, where = find_api_key(cfg)
+    if not key:
+        out.append(f"Add your Jev API key ({where}).")
+    if not project_roots(cfg)[0]:
+        out.append("Add at least one folder that holds your projects.")
+    return out
 
 
 class SettingsError(SorterError):
@@ -264,18 +402,18 @@ class SettingsError(SorterError):
         self.errors = errors
 
 
-def load_folder_settings() -> dict:
+def load_folder_settings(path: Path) -> dict:
     """Custom folders, per-project hints and switched-off projects."""
     data = {"custom": [], "notes": {}, "disabled": []}
-    if FOLDERS_PATH.exists():
+    if path.exists():
         try:
-            data.update(json.loads(FOLDERS_PATH.read_text()))
+            data.update(json.loads(path.read_text()))
         except json.JSONDecodeError as e:
-            raise SorterError(f"{FOLDERS_PATH} is not valid JSON: {e}") from e
+            raise SorterError(f"{path} is not valid JSON: {e}") from e
     return data
 
 
-def save_folder_settings(data: dict) -> dict:
+def save_folder_settings(data: dict, path: Path) -> dict:
     custom, seen = [], set()
     for c in data.get("custom", []):
         name = str(c.get("name", "")).strip()
@@ -293,8 +431,8 @@ def save_folder_settings(data: dict) -> dict:
         "notes": {str(k): str(v).strip()[:400] for k, v in data.get("notes", {}).items() if str(v).strip()},
         "disabled": sorted({str(d) for d in data.get("disabled", [])}),
     }
-    FOLDERS_PATH.parent.mkdir(parents=True, exist_ok=True)
-    FOLDERS_PATH.write_text(json.dumps(clean, indent=2))
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(clean, indent=2))
     return clean
 
 
@@ -382,7 +520,7 @@ def root_report(cfg: dict) -> list[dict]:
 
 def all_folders(cfg: dict, settings: dict | None = None) -> list[Folder]:
     """Custom folders first, then projects. Includes switched-off ones (enabled=False)."""
-    settings = settings or load_folder_settings()
+    settings = settings or load_folder_settings(cfg["folders_path"])
     notes = {k.lower(): v for k, v in cfg["project_notes"].items()}
     notes.update({k.lower(): v for k, v in settings["notes"].items()})
     disabled = {d.lower() for d in settings["disabled"]}
@@ -578,7 +716,14 @@ async def classify_all(
     progress: Callable[[int, int], None] | None = None,
 ) -> int:
     """Fill in item.result for every item. Returns the input tokens used."""
-    from typesafe_sdk import AsyncTypeSafeClient, Choice, Image, TypeSafeBadRequestError
+    from typesafe_sdk import (
+        AsyncTypeSafeClient,
+        Choice,
+        Image,
+        TypeSafeAuthenticationError,
+        TypeSafeBadRequestError,
+        TypeSafePermissionDeniedError,
+    )
 
     crit = folder_criteria(folders)
     reverse = dict(reversed(list(crit.items())))
@@ -629,6 +774,11 @@ async def classify_all(
                         "used_image": item.image is not None,
                     }
                     cache[key] = item.result
+                except (TypeSafeAuthenticationError, TypeSafePermissionDeniedError) as e:
+                    raise SorterError(
+                        "Jev didn't accept the API key. Check it in Settings (or `unorphan config set api_key -`); "
+                        "keys are at https://console.typesafe.ai/keys"
+                    ) from e
                 except Exception as e:  # keep going; the item just stays put
                     item.result = {"error": f"{type(e).__name__}: {e}"[:200]}
         done += 1
