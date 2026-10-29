@@ -38,10 +38,8 @@ You'll need:
 - [uv](https://docs.astral.sh/uv/getting-started/installation/), which installs everything else
 - a TypeSafe API key, from [console.typesafe.ai/keys](https://console.typesafe.ai/keys)
 
-Clone this repository, then from inside it:
-
 ```sh
-uv tool install .
+uv tool install git+https://github.com/sushrutkhandelwal/unorphan
 unorphan ui
 ```
 
@@ -49,7 +47,8 @@ The first command installs an `unorphan` command you can run from anywhere. The 
 opens the app in your browser. The first time, it opens **Settings** and tells you what's missing
 (usually the API key).
 
-To try it without installing, run `uv run unorphan ui` from inside the repository instead.
+To update later, run `uv tool upgrade unorphan`. To try it from a clone without installing, run
+`uv run unorphan ui` inside the repository.
 
 ## Using it
 
@@ -181,7 +180,7 @@ before you ask, so you can offer real options rather than make the person type p
 
 ```sh
 uv --version              # if missing: https://docs.astral.sh/uv/getting-started/installation/
-uv tool install .         # from inside a clone; otherwise: uv tool install git+<repository URL>
+uv tool install git+https://github.com/sushrutkhandelwal/unorphan
 unorphan status --json    # what's already set up
 ```
 
